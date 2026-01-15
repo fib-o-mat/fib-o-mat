@@ -16,7 +16,6 @@ class Arc(Shape, ArcSplineCompatible):  # pylint: disable=too-many-public-method
 
     Some formulas take from `here <http://www.lee-mac.com/bulgeconversion.html>`_.
 
-    TODO: from_points((-1, 0), (0, 1), (-1, 0)) does not work. Should it!?
     """
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -30,8 +29,8 @@ class Arc(Shape, ArcSplineCompatible):  # pylint: disable=too-many-public-method
         """
         Args:
             radius (float): radius
-            start_angle (float): starting angle (measured from pos. x-axis)
-            end_angle (float): end angle (measured from pos. x-axis)
+            start_angle (float): starting angle (measured from pos. x-axis, in radiants)
+            end_angle (float): end angle (measured from pos. x-axis, in radiants)
             sweep_dir (bool): if True, arc direction is in mathematical positive direction and in math. negative
                               direction if False
             center (VectorLike, optional): center of completed arc, default to (0, 0)
@@ -100,6 +99,9 @@ class Arc(Shape, ArcSplineCompatible):  # pylint: disable=too-many-public-method
         p1 = Vector(p1)
         p2 = Vector(p2)
         p3 = Vector(p3)
+
+        if p1==p2 or p1==p3 or p2==p3:
+            raise ValueError("Arc through points is only defined for three different points.")
 
         bulge = np.tan((np.pi - (p1 - p2).angle_about_x_axis + (p3 - p2).angle_about_x_axis) / 2)
         # print('bulge', bulge, (np.pi - angle_about_xaxis(p1 - p2) + angle_about_xaxis(p3 - p2)) / 2)

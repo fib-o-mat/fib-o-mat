@@ -58,7 +58,8 @@ class Curve(RasterStyle):
         points = rasterize(dim_shape.shape, pitch_scaled)
 
         points._dwell_points[:, :2] *= scale_factor(out_length_unit, dim_shape.unit)
-        points._dwell_points[:, 2] = scale_to(out_time_unit, mill.dwell_time)
+        points._dwell_points[:, 2] = [scale_to(out_time_unit,mill.dwell_time(p[0:2])) for p in points._dwell_points]
+        #points._dwell_points[:, 2] = scale_to(out_time_unit, mill.dwell_time)
 
         if self._scan_sequence in [ScanSequence.BACKSTITCH, ScanSequence.CONSECUTIVE]:
             if self._scan_sequence == ScanSequence.BACKSTITCH:

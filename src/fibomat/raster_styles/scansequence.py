@@ -6,7 +6,7 @@ import numpy as np
 from fibomat.shapes import Shape
 from fibomat.units import LengthUnit, TimeUnit
 from fibomat.raster_styles.rasterstyle import RasterStyle
-from fibomat.mill import Mill
+from fibomat.mill import Mill, DDDMill
 from fibomat.rasterizedpattern import RasterizedPattern
 
 
@@ -98,7 +98,8 @@ def _apply_scan_sequence(
     if scan_sequence == ScanSequence.CROSSECTION:
         line_mill = mill
     else:
-        line_mill = Mill(mill.dwell_time, repeats=1)
+        line_mill = DDDMill(mill.dwell_time, repeats=1)
+        #line_mill = Mill(mill.dwell_time, repeats=1)
 
     rasterized_lines = []
 

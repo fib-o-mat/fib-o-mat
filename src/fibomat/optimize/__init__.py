@@ -11,7 +11,7 @@ from fibomat.mill.ionbeam import GaussBeam, IonBeam
 from fibomat.units import Q_, UnitType, U_, scale_factor, QuantityType, LengthQuantity, scale_to, LengthUnit
 # from fibomat.sample import Sample
 from fibomat.curve_tools import rasterize, smooth, deflate
-from fibomat.dimensioned_object import DimObjLike, DimObj
+from fibomat._dimensioned_object import DimObjLike, DimObj
 
 try:
     import numba

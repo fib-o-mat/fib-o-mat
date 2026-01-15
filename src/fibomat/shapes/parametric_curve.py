@@ -9,6 +9,7 @@ import scipy.integrate as integrate
 import scipy.optimize as optimize
 
 import numpy as np
+import multiprocessing
 
 import sympy
 import sympy.geometry as sympy_geom
@@ -95,7 +96,8 @@ class ParametricCurve(Shape, ArcSplineCompatible):
         cls,
         curve: sympy_geom.Curve,
         try_length_integration: bool = False,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        integration_timeout=5
     ):
         """Create a :class:`ParametricCurve` from a sympy curve. All derivatives are calculated automatically.
 
@@ -134,16 +136,36 @@ class ParametricCurve(Shape, ArcSplineCompatible):
             (dfunc[0]*d2func[1] - dfunc[1]*d2func[0]) / (dfunc[0]**2 + dfunc[1]**2)**sympy.Rational(3, 2)
         )
 
-        # todo: time out integration
-        lambda_length: Optional[Callable]
-        if try_length_integration:
-            length = sympy.simplify(sympy.integrate(sympy.sqrt(dfunc[0]*dfunc[0] + dfunc[1]*dfunc[1]), curve.parameter))
 
-            # integration failed
-            if isinstance(length, sympy.Integral):
+        lambda_length: Optional[Callable]
+
+        if try_length_integration:
+            def integrate_with_timeout(dfunc, curveparameter, queue):
+                result = sympy.simplify(
+                    sympy.integrate(sympy.sqrt(dfunc[0] * dfunc[0] + dfunc[1] * dfunc[1]), curveparameter)
+                )
+                queue.put(result)
+            print("Trying length integration...")
+            # length integration is done in a separate process not for optimization but only for timeout
+            queue = multiprocessing.Queue()
+            process = multiprocessing.Process(target=integrate_with_timeout, args=(dfunc, curve.parameter, queue))
+            process.start()
+            process.join(timeout=integration_timeout)
+
+            if process.is_alive():  #integration failed
+                process.terminate()
+                process.join()
+                print(f"Length integration timed out after {integration_timeout} seconds.")
+                length = sympy.Integral(sympy.sqrt(dfunc[0] * dfunc[0] + dfunc[1] * dfunc[1]), curve.parameter)  # unevaluated integral
+            else:
+                if not queue.empty():
+                    length = queue.get()
+                else:
+                    length = sympy.Integral(sympy.sqrt(dfunc[0] * dfunc[0] + dfunc[1] * dfunc[1]), curve.parameter)
+
+            if isinstance(length, sympy.Integral):  # integral was not evaluated
                 lambda_length = None
             else:
-                # lambda_length = sympy.lambdify(curve.parameter, length, 'numpy')
                 antiderivate = lambdify_np(curve.parameter, length, 'numpy')
 
                 def lambda_length(t_0: float, t_1: float):

@@ -103,7 +103,7 @@ class VectorBase(Sequence[T], abc.ABC):
                     vector = self._from_iterable([x, y])
                 else:
                     raise VectorValueError(
-                        "if x is int or float, y must be defined and must have the same type."
+                        f"if x is int or float, y must be defined and must have the same type. Got x = {x} and y = {y}."
                     )
             else:  # x is some kind of list, tuple, Vector, np.ndarray, ...
                 if (y is not None) or (r is not None) or (phi is not None):

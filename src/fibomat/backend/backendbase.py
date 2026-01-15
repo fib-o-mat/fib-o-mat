@@ -284,8 +284,9 @@ class BackendBase(metaclass=BackendBaseMeta):
         """
         raise NotImplementedError
 
+
     @shape_type(shapes.Ring)
-    def circle(self, ptn: Pattern[shapes.Ring]) -> None:
+    def ring(self, ptn: Pattern[shapes.Ring]) -> None:
         """
         Adds pattern with `Ring` as shape to the backend.
 
@@ -295,7 +296,9 @@ class BackendBase(metaclass=BackendBaseMeta):
         Returns:
             None
         """
+        
         raise NotImplementedError
+
 
     @shape_type(shapes.Arc)
     def arc(self, ptn: Pattern[shapes.Arc]) -> None:

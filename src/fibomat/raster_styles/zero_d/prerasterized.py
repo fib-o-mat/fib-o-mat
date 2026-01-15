@@ -44,7 +44,7 @@ class PreRasterized(RasterStyle):
             points = np.array(dim_shape.shape.dwell_points)
 
             points[:, :2] *= scale_factor(out_length_unit, dim_shape.unit)
-            points[:, 2] *= scale_to(out_time_unit, mill.dwell_time)
+            points[:, 2] *= [scale_to(out_time_unit,mill.dwell_time(p[0:2])) for p in points._dwell_points] #scale_to(out_time_unit, mill.dwell_time)
 
             if mill.repeats != 1:
                 return RasterizedPattern(np.concatenate([points]*mill.repeats), out_length_unit, out_time_unit)

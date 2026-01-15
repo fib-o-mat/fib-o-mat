@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional, Union
 import bokeh.models as bm
 import bokeh.plotting as bp
 import bokeh.resources as br
+from bokeh.transform import linear_cmap
+from bokeh.palettes import Viridis256 
 import numpy as np
 import PIL.Image
 from bokeh.util import compiler
@@ -180,6 +182,7 @@ class BokehBackend(BokehBackendBase):
         image_alpha: float = 0.75,
         plot_reduced_lattices: bool = False,
         only_sites: bool = False,
+        plot_rasterized: bool = False,
         **kwargs,
     ):
         """
@@ -193,6 +196,7 @@ class BokehBackend(BokehBackendBase):
             fullscreen (bool, optional): if true, plot will be take the whole page, default to True
             cycle_colors (bool): if True, different sites get different colors.
             image_alpha (float): alpha value (transparency) of images, default to 0.75
+            plot_rasterized: if True, shapes are rasterized and only points are plotted
         """
         super().__init__(**kwargs)
 
@@ -226,6 +230,8 @@ class BokehBackend(BokehBackendBase):
 
         self._plot_reduced_latties = plot_reduced_lattices
 
+        self._plot_rasterized = plot_rasterized
+
         self._bokeh_sites: List[BokehSite] = []
         self._annotation_site = BokehSite(
             site_index=-1,
@@ -237,7 +243,15 @@ class BokehBackend(BokehBackendBase):
         )
         self._image_annotation: List[BokehImage] = []
         self._image_alpha = float(image_alpha)
-        self.fig: Optional[bp.Figure] = None
+        self.fig = bp.figure(
+            title=self._title,
+            x_axis_label=f"x / {self._unit:~P}",
+            y_axis_label=f"y / {self._unit:~P}",
+            match_aspect=True,
+            sizing_mode="stretch_both" if self._fullscreen else "stretch_width",
+            tools="pan,wheel_zoom,reset,save",
+        )
+        self.point_cloud = []
 
     def process_site(self, site: Site):
         self._bokeh_sites.append(
@@ -256,8 +270,44 @@ class BokehBackend(BokehBackendBase):
         if not self._only_sites:
             super().process_site(site)
 
+    def _plot_rasterized_points(self) -> None:
+            points = np.concatenate(self.point_cloud, axis=0)#rasterized_pattern.dwell_points
+            x = points[:, 0]
+            y = points[:, 1]
+            t = points[:, 2]
+            color_mapper = bm.LinearColorMapper(palette=Viridis256[::-1], low=min(t), high=max(t)) 
+            color_map = linear_cmap(field_name='t', palette=Viridis256[::-1], low=min(t), high=max(t))
+
+            source = bm.ColumnDataSource(data=dict(x=x, y=y, t=t))
+            self.fig.scatter(
+                x='x', y='y', size=5, 
+                color=color_map,
+                source=source)
+            color_bar = bm.ColorBar(color_mapper=color_mapper, label_standoff=12, location=(0, 0), title = "dwell time (ms)")
+            self.fig.add_layout(color_bar, 'right')
+    
+
+
+    def _process_rasterized(self, ptn: Pattern):
+        rasterized_pattern = ptn.raster_style.rasterize(
+            dim_shape=ptn.dim_shape,
+            mill=ptn.mill,
+            out_length_unit=self._unit,
+            out_time_unit=Q_("1 ms")
+        )
+        points = rasterized_pattern.dwell_points
+        self.point_cloud.append(points)
+
+
+
     def process_pattern(self, ptn: Pattern) -> None:
         # super().process_pattern(ptn)
+        if self._plot_rasterized:
+            try:
+                self._process_rasterized(ptn)
+                return
+            except Exception as e:
+                print(f"Rasterization failed for pattern {ptn} due to {e}, falling back to normal plotting.")
         def dispatch(extracted_ptn):
             try:
                 method = self.implemented_shape_methods[
@@ -405,7 +455,7 @@ class BokehBackend(BokehBackendBase):
 
     @staticmethod
     def _create_renderers(fig, data_sources):
-        spot_glyphs = fig.circle_x(
+        spot_glyphs = fig.scatter(
             x="x",
             y="y",
             fill_color="color",
@@ -475,6 +525,9 @@ class BokehBackend(BokehBackendBase):
             ("description", "@description")
         ]
 
+        fig = self.fig
+        """
+
         fig = bp.figure(
             title=self._title,
             x_axis_label=f"x / {self._unit:~P}",
@@ -483,6 +536,7 @@ class BokehBackend(BokehBackendBase):
             sizing_mode="stretch_both" if self._fullscreen else "stretch_width",
             tools="pan,wheel_zoom,reset,save",
         )
+        """
 
         # line_color=bc.groups.red.Crimson, line_width=3  # bpal.all_palettes['Colorblind'][4][3]
 
@@ -495,33 +549,11 @@ class BokehBackend(BokehBackendBase):
         fig.add_tools(bm.BoxZoomTool(match_aspect=True))
 
         data_sources = self._create_datasources()
-        renderers = self._create_renderers(fig, data_sources)
+        renderers = self._create_renderers(fig, data_sources)  # adds all vector graphics to plot
+        if self._plot_rasterized:
+            self._plot_rasterized_points()
 
         self._plot_impl(data_sources)
-
-        # spot_glyphs = fig.circle_x(
-        #     x='x', y='y',
-        #     fill_color='color', line_color='color', fill_alpha=.25,
-        #     legend_group='site_id',
-        #     size=10,
-        #     source=bm.ColumnDataSource(self._collect_plot_data(ShapeType.SPOT))
-        # )
-
-        # non_filled_curve_glyphs = fig.multi_line(
-        #     xs='x', ys='y',
-        #     line_color='color', line_width=2,
-        #     legend_group='site_id',
-        #     source=bm.ColumnDataSource(self._collect_plot_data(ShapeType.NON_FILLED_CURVE))
-        # )
-
-        # filled_curve_glyphs = fig.multi_polygons(
-        #     xs='x', ys='y',
-        #     line_width=2,
-        #     fill_color='color', line_color='color', fill_alpha='fill_alpha',
-        #     hatch_pattern='hatch_pattern',
-        #     legend_group='site_id',
-        #     source=bm.ColumnDataSource(self._collect_plot_data(ShapeType.FILLED_CURVE))
-        # )
 
         # images
         if images := self._image_annotation:

@@ -41,7 +41,7 @@ def approximate_parametric_curve(
     """
 
     if rasterize_pitch <= epsilon:
-        raise ValueError('rasterize_pitch must be large than epsilon.')
+        raise ValueError('rasterize_pitch must be larger than epsilon.')
 
     parameter_values = param_curve.rasterize(rasterize_pitch, safety=1, add_endpoint=True)
 

@@ -3,7 +3,7 @@
 from fibomat.sample import Sample
 from fibomat.site import Site
 from fibomat.pattern import Pattern
-from fibomat.mill import Mill
+from fibomat.mill import Mill, DDDMill, SILMill
 from fibomat.linalg import Vector, DimVector
 from fibomat.units import U_, Q_
 

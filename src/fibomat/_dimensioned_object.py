@@ -14,7 +14,7 @@ DimObjT = TypeVar('DimObjT', bound='DimensionedObj')
 
 
 @dataclass(frozen=True)
-class DimensionedObj(Generic[ObjT, UnitT], DimTransformable):
+class DimensionedObj(DimTransformable, Generic[ObjT, UnitT]):
     """Class should be used if any kind of object must have an associated unit.
 
     Examples::

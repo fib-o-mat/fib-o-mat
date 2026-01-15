@@ -129,9 +129,9 @@ class ContourParallel(RasterStyle):
         out_time_unit: TimeUnit
     ) -> RasterizedPattern:
 
-        # dim_shape = DimObj.create(dim_shape)
-
-        offsetted_curves = self._gen_offset_curves(dim_shape.obj.to_arc_spline(), dim_shape.unit)
+        assert isinstance(dim_shape._shape, ArcSplineCompatible), f"{dim_shape._shape} is not ArcSplineCompatible and thus cannot be rasterized countour parallel."
+        
+        offsetted_curves = self._gen_offset_curves(dim_shape._shape.to_arc_spline(), dim_shape.unit)
 
         if not self._optimize:
             return _apply_scan_sequence(

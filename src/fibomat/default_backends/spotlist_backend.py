@@ -110,9 +110,14 @@ class SpotListBackend(BackendBase):
         self._site_count: int = 0
         self._site_pos: Optional = None
         self._dwell_points = []
+        self._site_bounding_box: None  # for now save fov from site here if there is only one site
 
     def process_site(self, new_site: site.Site):
         self._site_pos = new_site.center.vector_as(self._length_unit)
+
+        #raise Exception(new_site.fov_bounding_box)
+
+        self._site_bounding_box = new_site.fov_bounding_box
 
         self._site_count += 1
 
@@ -128,6 +133,8 @@ class SpotListBackend(BackendBase):
             dwell_points[:, 2] /= units.scale_to(self._time_unit, self._base_dwell_time)
 
         bbox = BoundingBox.from_points(dwell_points[:, :2])
+        if bbox.height==0 or bbox.width==0:
+            bbox= self._site_bounding_box
 
         self._save_impl(
             filename, dwell_points,

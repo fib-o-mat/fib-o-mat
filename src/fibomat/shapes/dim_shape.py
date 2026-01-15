@@ -53,3 +53,13 @@ class DimShape(DimTransformable):
 
         # vector length does not matter, mirror axis is normalized anyway.
         self._shape._impl_mirror(mirror_axis.vector)
+    
+    def set_unit(self, unit: U_) -> None:
+        if not isinstance(unit, U_):
+            raise TypeError('unit must be of type pint.Unit (aka U_).')
+
+        if not has_length_dim(unit):
+            raise ValueError('unit must have dimension [lenght].')
+        factor=scale_factor(unit, self._unit)
+        self._unit=unit
+        self.shape._impl_scale(factor)

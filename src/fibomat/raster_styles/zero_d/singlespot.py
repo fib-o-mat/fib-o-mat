@@ -36,8 +36,9 @@ class SingleSpot(RasterStyle):
         spot = dim_shape.shape
         dwell_point = [
             *(spot.position * scale_factor(out_length_unit, dim_shape.unit)),
-            scale_to(out_time_unit, mill.dwell_time)
+            scale_to(out_time_unit, mill.dwell_time(spot.position))
         ]
+        print(dwell_point)
 
         # return RasterizedPoints(np.array([dwell_point]*mill.repeats), False)
         return RasterizedPattern(np.array([dwell_point]*mill.repeats), out_length_unit, out_time_unit)
