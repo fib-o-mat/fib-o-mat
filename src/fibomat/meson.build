@@ -7,8 +7,7 @@ python_sources = [
     'py.typed',
     'rasterizedpattern.py',
     'sample.py',
-    'site.py',
-    'units.py'
+    'site.py'
 ]
 
 py.install_sources(
@@ -27,4 +26,5 @@ subdir('mill')
 subdir('optimize')
 subdir('raster_styles')
 subdir('shapes')
+subdir('units')
 subdir('utils')
