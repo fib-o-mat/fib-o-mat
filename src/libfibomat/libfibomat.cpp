@@ -59,6 +59,7 @@ PYBIND11_MODULE(_libfibomat, m) {
 
         .def_property_readonly("orientation", &arc_spline_t::orientation)
         .def_property_readonly("length", &arc_spline_t::length)
+        .def_property_readonly("area", &arc_spline_t::area)
         .def_property_readonly("start", &arc_spline_t::start)
         .def_property_readonly("end", &arc_spline_t::end)
         .def_property_readonly("vertices", &arc_spline_t::vertices)

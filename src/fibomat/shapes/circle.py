@@ -1,4 +1,5 @@
 """Provides the :class:`Circle` class."""
+
 # pylint: disable=invalid-name
 from __future__ import annotations
 from typing import Optional
@@ -13,7 +14,12 @@ from fibomat.shapes.arc_spline import ArcSpline, ArcSplineCompatible
 class Circle(Shape, ArcSplineCompatible):
     """2-dim circle."""
 
-    def __init__(self, r: float, center: Optional[VectorLike] = None, description: Optional[str] = None):
+    def __init__(
+        self,
+        r: float,
+        center: Optional[VectorLike] = None,
+        description: Optional[str] = None,
+    ):
         """
 
         Args:
@@ -29,10 +35,16 @@ class Circle(Shape, ArcSplineCompatible):
         self._center = Vector(center) if center is not None else Vector()
         self._r = float(r)
         if self._r <= 0:
-            raise ValueError('radius <= 0.')
+            raise ValueError("radius <= 0.")
 
     @classmethod
-    def from_points(cls, p1: VectorLike, p2: VectorLike, p3: VectorLike, description: Optional[str] = None):
+    def from_points(
+        cls,
+        p1: VectorLike,
+        p2: VectorLike,
+        p3: VectorLike,
+        description: Optional[str] = None,
+    ):
         """Create circumscribed circle (from three points).
 
         Args:
@@ -51,23 +63,27 @@ class Circle(Shape, ArcSplineCompatible):
 
         inv_d = 1 / (2 * (b.x * c.y - b.y * c.x))
 
-        b2 = b.x*b.x + b.y*b.y
-        c2 = c.x*c.x + c.y*c.y
+        b2 = b.x * b.x + b.y * b.y
+        c2 = c.x * c.x + c.y * c.y
 
         u = Vector(inv_d * (c.y * b2 - b.y * c2), inv_d * (b.x * c2 - c.x * b2))
-        r = np.sqrt(u.x*u.x + u.y*u.y)
+        r = np.sqrt(u.x * u.x + u.y * u.y)
 
         return cls(r, u + a, description)
 
     def __repr__(self) -> str:
-        return '{}(r={!r}, center={!r})'.format(
-            self.__class__.__name__, self.r, self.center)
+        return "{}(r={!r}, center={!r})".format(
+            self.__class__.__name__, self.r, self.center
+        )
 
     def to_arc_spline(self) -> ArcSpline:
         return ArcSpline(
-            [(*(self._center + Vector(self._r, 0.)), 1.), (*(self._center - Vector(self._r, 0.)), 1.)],
+            [
+                (*(self._center + Vector(self._r, 0.0)), 1.0),
+                (*(self._center - Vector(self._r, 0.0)), 1.0),
+            ],
             True,
-            self.description
+            self.description,
         )
 
     @property
@@ -87,8 +103,14 @@ class Circle(Shape, ArcSplineCompatible):
         return self._center
 
     @property
+    def area(self) -> float:
+        return np.pi * self._r**2
+
+    @property
     def bounding_box(self) -> BoundingBox:
-        return BoundingBox(self._center-(self._r, self._r), self._center + (self._r, self._r))
+        return BoundingBox(
+            self._center - (self._r, self._r), self._center + (self._r, self._r)
+        )
 
     @property
     def is_closed(self) -> bool:

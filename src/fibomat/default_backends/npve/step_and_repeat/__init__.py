@@ -1,13 +1,15 @@
 from typing import Optional, List
 import warnings
 
+
 import xmltodict
 import numpy as np
-from colored import Fore, Style, Back
+# from colored import Fore, Style, Back
 
 from fibomat.utils import PathLike
 from fibomat.backend import BackendBase
-from fibomat.default_backends import BitmapBackend
+
+# from fibomat.default_backends import BitmapBackend
 from fibomat.sample import Sample
 from fibomat.site import Site
 from fibomat.pattern import Pattern
@@ -22,8 +24,16 @@ from fibomat.shapes import (
     Ellipse,
     Ring,
 )
-from fibomat.units import U_, scale_factor
-from fibomat.curve_tools import rasterize_with_const_error
+from fibomat.units import (
+    U_,
+    scale_factor,
+    # LengthUnit,
+    # TimeUnit,
+    # LengthQuantity,
+    # has_length_dim,
+    # scale_to,
+)
+from fibomat.curve_tools.rasterize import rasterize_with_const_error
 from fibomat.linalg import Vector
 from fibomat.default_backends.npve.step_and_repeat.sar_models import (
     SaRFile,

@@ -1,15 +1,15 @@
 """Provide LineByLine raster style."""
 
-import numpy as np
-
 from fibomat.rasterizedpattern import RasterizedPattern
 from fibomat.raster_styles.rasterstyle import RasterStyle
-from fibomat.units import LengthUnit, TimeUnit, LengthQuantity, has_length_dim, scale_to, scale_factor
+from fibomat.units import LengthUnit, TimeUnit, LengthQuantity, has_length_dim, scale_to
 from fibomat.mill import Mill
-from fibomat.shapes import Shape, RasterizedPoints, DimShape
-from fibomat.raster_styles.scansequence import ScanSequence, _make_scan_index_sequence, _apply_scan_sequence
-from fibomat.raster_styles.one_d import Curve
-from fibomat.curve_tools import fill_with_lines, rasterize
+from fibomat.shapes import DimShape
+from fibomat.raster_styles.scansequence import (
+    ScanSequence,
+    _apply_scan_sequence,
+)
+from fibomat.curve_tools import fill_with_lines
 from fibomat.shapes._line_non_continuous import LineNonContinuous
 
 
@@ -20,10 +20,10 @@ class LineByLine(RasterStyle):
         scan_sequence: ScanSequence,
         alpha: float,
         invert: bool,
-        line_style: RasterStyle
+        line_style: RasterStyle,
     ):
         if not has_length_dim(line_pitch):
-            raise ValueError('line_pitch must have dimension [length].')
+            raise ValueError("line_pitch must have dimension [length].")
         self._line_pitch = line_pitch
 
         self._alpha = alpha
@@ -32,7 +32,7 @@ class LineByLine(RasterStyle):
         self._scan_sequence = scan_sequence
 
         if line_style.dimension != 1:
-            raise ValueError('line_style must have dimension == 1')
+            raise ValueError("line_style must have dimension == 1")
 
         # if not line_style.scan_sequence == ScanSequence.CONSECUTIVE:
         #     raise NotImplementedError
@@ -40,7 +40,14 @@ class LineByLine(RasterStyle):
         self._line_style = line_style
 
     def __repr__(self):
-        return '{}(line_pitch={!r}, alpha={!r}, invert={!r}, scan_sequence={!r}, line_style={!r})'.format(self.__class__.__name__, self._line_pitch, self._alpha, self._invert, self._scan_sequence, self._line_style)
+        return "{}(line_pitch={!r}, alpha={!r}, invert={!r}, scan_sequence={!r}, line_style={!r})".format(
+            self.__class__.__name__,
+            self._line_pitch,
+            self._alpha,
+            self._invert,
+            self._scan_sequence,
+            self._line_style,
+        )
 
     @property
     def dimension(self) -> int:
@@ -71,12 +78,15 @@ class LineByLine(RasterStyle):
         dim_shape: DimShape,
         mill: Mill,
         out_length_unit: LengthUnit,
-        out_time_unit: TimeUnit
+        out_time_unit: TimeUnit,
     ) -> RasterizedPattern:
         # dim_shape = DimObj.create(dim_shape)
 
         filling_rows = fill_with_lines(
-            dim_shape.shape.to_arc_spline(), scale_to(dim_shape.unit, self._line_pitch), self._alpha, self._invert
+            dim_shape.shape.to_arc_spline(),
+            scale_to(dim_shape.unit, self._line_pitch),
+            self._alpha,
+            self._invert,
         )
 
         return _apply_scan_sequence(
@@ -86,7 +96,7 @@ class LineByLine(RasterStyle):
             line_style=self._line_style,
             mill=mill,
             out_length_unit=out_length_unit,
-            out_time_unit=out_time_unit
+            out_time_unit=out_time_unit,
         )
 
         # rasterized_lines = []

@@ -1,4 +1,5 @@
 """Provides the :class:`Polygon` class."""
+
 from typing import Optional, List
 
 import numpy as np
@@ -22,12 +23,12 @@ class Polygon(polyline.Polyline):
 
     @classmethod
     def regular_ngon(  # pylint: disable=too-many-arguments,invalid-name
-            cls,
-            n: int,
-            radius: float = 1.,
-            circumcircle: bool = True,
-            center: Optional[VectorLike] = None,
-            description: Optional[str] = None
+        cls,
+        n: int,
+        radius: float = 1.0,
+        circumcircle: bool = True,
+        center: Optional[VectorLike] = None,
+        description: Optional[str] = None,
     ):
         """
         Creates an regular polygon.
@@ -46,24 +47,28 @@ class Polygon(polyline.Polyline):
             ValueError: Raised of n < 3 or radius <= 0.
         """
         if n < 3:
-            raise ValueError('n < 3')
+            raise ValueError("n < 3")
 
-        if radius <= 0.:
-            raise ValueError('radius <= 0.')
+        if radius <= 0.0:
+            raise ValueError("radius <= 0.")
 
         if not circumcircle:
             radius = radius / np.cos(np.pi / n)
 
         center = Vector(center) if center is not None else Vector(0, 0)
 
-        angle = 2*np.pi / n
+        angle = 2 * np.pi / n
 
-        points = [Vector(radius, 0.)]
+        points = [Vector(radius, 0.0).rotated(-angle / 2)]
         for i in range(1, n):
-            points.append(points[i-1].rotated(angle))
+            points.append(points[i - 1].rotated(angle))
 
         return cls(np.array(points) + center, description)
 
     @property
     def is_closed(self) -> bool:
         return True
+
+    @property
+    def area(self) -> float:
+        return self.to_arc_spline().area

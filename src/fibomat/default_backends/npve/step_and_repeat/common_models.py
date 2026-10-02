@@ -1,14 +1,14 @@
 from typing import List, Tuple, Optional
 import base64
 import io
-import warnings
 
 import numpy as np
 
-from fibomat.units import Q_
+from fibomat.units import U_, Q_, scale_to
 from fibomat.linalg import VectorLike
 from fibomat.raster_styles import RasterStyle, two_d, one_d, zero_d, ScanSequence
 from fibomat.default_backends.npve.step_and_repeat.npve_mill import NPVEMill
+from fibomat.default_backends.npve.step_and_repeat.outline import LineByLineOutlined
 
 
 class _Mill:
@@ -152,16 +152,16 @@ class FIBShape:
         nodes: List[Tuple[VectorLike, int]],
         mill: NPVEMill,
         raster_style: RasterStyle,
-        outline: Optional[float] = None,
+        # outline: Optional[LineByLineOutlined] = None,
         shape_texture: Optional = None,
-        angle: Optional[float] = 0,
+        # angle: Optional[float] = 0,
     ):
         self.class_ = class_
         self.display_id = id
         self.shape_name = class_[1:]
 
         # for now
-        self.angle = angle
+        self.angle = mill._scan_direction
 
         self.hole = False
 
@@ -175,7 +175,7 @@ class FIBShape:
 
         self.mill = _Mill(mill, raster_style)
 
-        if outline:
+        if isinstance(raster_style, LineByLineOutlined):
             # TODO: make this in a clean way
 
             # _outlined = LCBool(data_key='Outlined', default=False)
@@ -185,15 +185,30 @@ class FIBShape:
             # _pen_alignment = fields.Int(data_key='PenAlignment', default=0)
             # _outline_offset = fields.Float(data_key='OutlineOffset', default=0)
             # _direction = fields.Int(data_key='Direction', default=1)
+            #
+            # self.outline = {
+            #     "_outlined": True,
+            #     "_thickness": outline,  # factor of 0.5 !?
+            #     "_node_style": 0,
+            #     "_stroke_style": 0,
+            #     "_pen_alignment": 1,
+            #     "_outline_offset": 0,
+            #     # TODO: use ScanSequence!!
+            #     "_direction": 1 if self.class_ == "TRing" else 0,
+            # }
+
             self.outline = {
                 "_outlined": True,
-                "_thickness": outline,  # factor of 0.5 !?
-                "_node_style": 0,
+                "_thickness": scale_to(
+                    U_("µm"), raster_style._outline_offset
+                ),  # TODO: difference between thickness and outline offset? # factor of 0.5 !?
+                "_node_style": raster_style._outline_node_style.value,
                 "_stroke_style": 0,
-                "_pen_alignment": 1,
-                "_outline_offset": 0,
+                "_pen_alignment": raster_style._outline_alignement.value,  # TODO alignement
+                "_outline_offset": 0.0,  # TODO
                 # TODO: use ScanSequence!!
-                "_direction": 1 if self.class_ == "TRing" else 0,
+                "_direction": raster_style._outline_scan_style.value,
+                # "_direction": 1 if self.class_ == "TRing" else 0,
             }
 
         if shape_texture:

@@ -1,4 +1,5 @@
 """Provides the :class:`Rect` class."""
+
 from __future__ import annotations
 from typing import Optional, List
 
@@ -14,10 +15,12 @@ class Rect(Shape, ArcSplineCompatible):
     """2-dim rect."""
 
     def __init__(  # pylint: disable=too-many-arguments
-            self,
-            width: float, height: float, theta: float = 0,
-            center: Optional[VectorLike] = None,
-            description: Optional[str] = None
+        self,
+        width: float,
+        height: float,
+        theta: float = 0,
+        center: Optional[VectorLike] = None,
+        description: Optional[str] = None,
     ):
         """
         Args:
@@ -34,12 +37,15 @@ class Rect(Shape, ArcSplineCompatible):
 
         center = Vector(center)
 
-        self._rect = ArcSpline([
-            (*(center + (width_half, height_half)), 0.),
-            (*(center + (-width_half, height_half)), 0.),
-            (*(center + (-width_half, -height_half)), 0.),
-            (*(center + (width_half, -height_half)), 0.)
-        ], True).rotated(theta, 'center')
+        self._rect = ArcSpline(
+            [
+                (*(center + (width_half, height_half)), 0.0),
+                (*(center + (-width_half, height_half)), 0.0),
+                (*(center + (-width_half, -height_half)), 0.0),
+                (*(center + (width_half, -height_half)), 0.0),
+            ],
+            True,
+        ).rotated(theta, "center")
 
         self._rot_angle = float(theta)
 
@@ -58,7 +64,7 @@ class Rect(Shape, ArcSplineCompatible):
         Returns:
             Rect
         """
-        return cls(bbox.width, bbox.height, 0., bbox.center)
+        return cls(bbox.width, bbox.height, 0.0, bbox.center)
 
     @classmethod
     def from_line(cls, line: Line, height: float):
@@ -71,11 +77,16 @@ class Rect(Shape, ArcSplineCompatible):
         Returns:
             Rect
         """
-        direction = (line.end - line.start)
+        direction = line.end - line.start
         width = direction.mag
 
         # is theta correct?
-        return cls(width=width, height=height, center=line.center, theta=direction.angle_about_x_axis)
+        return cls(
+            width=width,
+            height=height,
+            center=line.center,
+            theta=direction.angle_about_x_axis,
+        )
 
     def to_arc_spline(self) -> ArcSpline:
         vertices = np.append(self.corners, np.zeros(4)[:, np.newaxis], axis=1)
@@ -109,8 +120,12 @@ class Rect(Shape, ArcSplineCompatible):
         return np.linalg.norm(start - end)
 
     @property
+    def area(self) -> float:
+        return self.width * self.height
+
+    @property
     def theta(self) -> float:
-        """ Rotation angle of rect.
+        """Rotation angle of rect.
 
         Access:
             get
@@ -133,8 +148,9 @@ class Rect(Shape, ArcSplineCompatible):
         return [Vector(vec) for vec in self._rect.vertices[:, :2]]
 
     def __repr__(self) -> str:
-        return '{}(width={!r}, height={!r}, theta={!r}, center={!r})'.format(
-            self.__class__.__name__, self.width, self.height, self.theta, self.center)
+        return "{}(width={!r}, height={!r}, theta={!r}, center={!r})".format(
+            self.__class__.__name__, self.width, self.height, self.theta, self.center
+        )
 
     @property
     def center(self) -> Vector:
@@ -167,4 +183,3 @@ class Rect(Shape, ArcSplineCompatible):
 
         rot_angle = signed_angle_between(ref_vec, self._rect.vertices[0, :2])
         self._rot_angle += rot_angle
-

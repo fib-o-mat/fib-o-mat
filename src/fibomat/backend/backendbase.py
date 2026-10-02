@@ -1,6 +1,7 @@
 """
 Provides the :class:`BackendBase` class.
 """
+
 from typing import Dict, Callable, Type
 import inspect
 

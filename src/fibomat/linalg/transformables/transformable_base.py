@@ -1,8 +1,9 @@
 """
 Provides the :class:`TransformableBase` class.
 """
+
 from __future__ import annotations
-from typing import Optional, Union, TypeVar, Literal, Type, Generic, Callable
+from typing import Optional, Union, TypeVar, Protocol, Type, Generic, Callable
 import abc
 
 import numpy as np
@@ -253,9 +254,7 @@ class TransformableBase(Describable, Generic[VectorT, ScalarT, BBoxT], abc.ABC):
         """
         if not np.isclose(float(fac), 1.0):
             clone: SelfT = self.clone()
-            clone._apply_shifted_trafo(
-                clone._impl_scale, fac, origin
-            )  # pylint: disable=protected-access
+            clone._apply_shifted_trafo(clone._impl_scale, fac, origin)  # pylint: disable=protected-access
             return clone
         return self
 

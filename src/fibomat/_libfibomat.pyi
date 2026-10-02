@@ -5,6 +5,7 @@ import numpy as np
 
 from fibomat.linalg import VectorLike
 
+
 class ArcSpline:
     ...
 
@@ -14,8 +15,10 @@ class ArcSpline:
     @overload
     def __init__(
         self,
-        vertices: Union[np.ndarray, List[List[float]], List[Tuple[float, float, float]]],
-        is_closed: bool
+        vertices: Union[
+            np.ndarray, List[List[float]], List[Tuple[float, float, float]]
+        ],
+        is_closed: bool,
     ): ...
 
     def clone(self) -> ArcSpline: ...
@@ -52,9 +55,14 @@ class ArcSpline:
     @property
     def length(self) -> float: ...
 
+    @property
+    def area(self) -> float: ...
+
     def contains(self, p_x: float, p_y: float) -> bool: ...
 
-    def closest_point(self,  p_x: float, p_y: float) -> Tuple[int, Tuple[float, float], float]: ...
+    def closest_point(
+        self, p_x: float, p_y: float
+    ) -> Tuple[int, Tuple[float, float], float]: ...
 
     def reverse(self) -> None: ...
 
@@ -66,17 +74,28 @@ class ArcSpline:
 
 
 IntersectionType = List[Tuple[int, int, Tuple[float, float]]]
-CoincidentType = List[Tuple[int, int, Tuple[float, float],  Tuple[float, float]]]
+CoincidentType = List[Tuple[int, int, Tuple[float, float], Tuple[float, float]]]
+
 
 def self_intersections(curve: ArcSpline) -> IntersectionType: ...
 
-def curve_intersections(curve_1: ArcSpline, curve_2: ArcSpline) -> Tuple[IntersectionType, CoincidentType]: ...
 
-def combine_curves(curve_1: ArcSpline, curve_2: ArcSpline, mode: str) -> Tuple[Iterable[ArcSpline], Iterable[ArcSpline]]: ...
+def curve_intersections(
+    curve_1: ArcSpline, curve_2: ArcSpline
+) -> Tuple[IntersectionType, CoincidentType]: ...
+
+
+def combine_curves(
+    curve_1: ArcSpline, curve_2: ArcSpline, mode: str
+) -> Tuple[Iterable[ArcSpline], Iterable[ArcSpline]]: ...
+
 
 def offset_curve(curves: ArcSpline, delta: float) -> Iterable[ArcSpline]: ...
 
-def offset_with_islands(islands: Iterable[ArcSpline], outer_curve: Optional[ArcSpline], delta: float)\
-    -> Tuple[Iterable[ArcSpline], Iterable[ArcSpline]]: ...
+
+def offset_with_islands(
+    islands: Iterable[ArcSpline], outer_curve: Optional[ArcSpline], delta: float
+) -> Tuple[Iterable[ArcSpline], Iterable[ArcSpline]]: ...
+
 
 def convert_arcs_to_lines(curve: ArcSpline, error: float) -> ArcSpline: ...

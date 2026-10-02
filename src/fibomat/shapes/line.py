@@ -1,15 +1,20 @@
 """Provides the :class:`Line` class."""
+
 from __future__ import annotations
+
 from typing import Optional
 
-from fibomat.linalg import Vector, VectorLike, BoundingBox
+from fibomat.linalg import BoundingBox, Vector, VectorLike
 from fibomat.shapes import shape
-
 from fibomat.shapes.arc_spline import ArcSpline, ArcSplineCompatible
+
 
 class Line(shape.Shape, ArcSplineCompatible):
     """1-dim line."""
-    def __init__(self, start: VectorLike, end: VectorLike, description: Optional[str] = None):
+
+    def __init__(
+        self, start: VectorLike, end: VectorLike, description: Optional[str] = None
+    ):
         """
         Args:
             start (VectorLike): start point of line
@@ -21,7 +26,7 @@ class Line(shape.Shape, ArcSplineCompatible):
         start = Vector(start)
         end = Vector(end)
 
-        self._line: ArcSpline = ArcSpline([(*start, 0.), (*end, 0.)], is_closed=False)
+        self._line: ArcSpline = ArcSpline([(*start, 0.0), (*end, 0.0)], is_closed=False)
 
     def to_arc_spline(self) -> ArcSpline:
         return self._line.clone_with_new_description(self.description)
@@ -62,14 +67,19 @@ class Line(shape.Shape, ArcSplineCompatible):
         """
         return self._line.length
 
+    @property
+    def boundary_length(self) -> float:
+        return self.length
+
     # def clone(self) -> Line:
     #     return self.__class__(self._line.clone())
     #
     # __copy__ = clone
 
     def __repr__(self) -> str:
-        return '{}(start={!r},end={!r}'.format(
-            self.__class__.__name__, self.start, self.end)
+        return "{}(start={!r},end={!r}".format(
+            self.__class__.__name__, self.start, self.end
+        )
 
     @property
     def is_closed(self) -> bool:
@@ -88,7 +98,7 @@ class Line(shape.Shape, ArcSplineCompatible):
 
         Args:
             p (Vector): point
-        
+
         Returns float
         """
         # https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
@@ -103,7 +113,7 @@ class Line(shape.Shape, ArcSplineCompatible):
     def intersection(self, other: Line):
         from fibomat.curve_tools.intersections import curve_intersections
 
-        return curve_intersections(self._line, other._line)['intersections'][0]['pos']
+        return curve_intersections(self._line, other._line)["intersections"][0]["pos"]
 
     def _impl_translate(self, trans_vec: VectorLike) -> None:
         self._line._impl_translate(trans_vec)  # pylint: disable=protected-access

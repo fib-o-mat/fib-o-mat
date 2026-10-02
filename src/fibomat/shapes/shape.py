@@ -1,7 +1,9 @@
 """Provides the `class:`Shape` class."""
+
 from __future__ import annotations
-from typing import Optional, Any
+
 import abc
+from typing import Any, Optional
 
 from fibomat.linalg import Transformable
 from fibomat.units import U_
@@ -33,9 +35,19 @@ class Shape(Transformable, abc.ABC):
         """
         raise NotImplementedError
 
+    @property
+    def area(self) -> float:
+        # only implemented for closed shapes
+        raise NotImplementedError
+
+    @property
+    def boundary_length(self) -> float:
+        raise NotADirectoryError
+
     def __mul__(self, other: Any):
         if isinstance(other, U_):
             from .dim_shape import DimShape
+
             return DimShape(self, other)
         else:
             raise NotImplementedError
