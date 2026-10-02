@@ -19,7 +19,7 @@ class Text(Group):
     @staticmethod
     def _add_stroke(polyline: Polyline, stroke_width: float) -> Polygon:
         def make_normals(p1: Vector, p2: Vector):
-            normal = make_perp_vector(p2-p1).normalized_to(stroke_width)
+            normal = make_perp_vector(p2 - p1).normalized_to(stroke_width)
             return normal, -1 * normal
 
         def make_offset_segments(p1: Vector, p2: Vector):
@@ -28,8 +28,14 @@ class Text(Group):
             length = np.linalg.norm(p1 - p2)
 
             return (
-                GeomLine(Vector((p2 + normals[0]) - (p1 + normals[0])).normalized_to(length), (p1 + normals[0])),
-                GeomLine(Vector((p2 + normals[1]) - (p1 + normals[1])).normalized_to(length), (p1 + normals[1]))
+                GeomLine(
+                    Vector((p2 + normals[0]) - (p1 + normals[0])).normalized_to(length),
+                    (p1 + normals[0]),
+                ),
+                GeomLine(
+                    Vector((p2 + normals[1]) - (p1 + normals[1])).normalized_to(length),
+                    (p1 + normals[1]),
+                ),
             )
 
         def make_points(segments_, prev_segments_):
@@ -39,11 +45,16 @@ class Text(Group):
                 param = segments_[0].intersect_at_param(prev_segments_[0])
 
                 if 0 < param < 1:
-                    return [segments_[0](param)], [prev_segments_[1](1), segments_[1](0)]
+                    return [segments_[0](param)], [
+                        prev_segments_[1](1),
+                        segments_[1](0),
+                    ]
                 else:
                     param = segments_[1].intersect_at_param(prev_segments_[1])
 
-                    return [prev_segments_[0](1), segments_[0](0)], [segments_[1](param)]
+                    return [prev_segments_[0](1), segments_[0](0)], [
+                        segments_[1](param)
+                    ]
 
         polyline_points = polyline.points
 
@@ -64,7 +75,7 @@ class Text(Group):
         prev_segments = first_segments
 
         for i in range(1, len(polyline_points) - 1):
-            segments = make_offset_segments(polyline_points[i], polyline_points[i+1])
+            segments = make_offset_segments(polyline_points[i], polyline_points[i + 1])
 
             first, second = make_points(segments, prev_segments)
 
@@ -93,7 +104,7 @@ class Text(Group):
         stroke_width: Optional[float] = None,
         text_alignment: Optional[str] = None,
         description: Optional[str] = None,
-        mapping: Optional[str] = None
+        mapping: Optional[str] = None,
     ):
         """
         Args:
@@ -106,18 +117,23 @@ class Text(Group):
             text_alignment (str, optional): the text alignment. Can be "left", "center", "right". Default to "left".
         """
 
-        mapping = mapping or 'roman_simplex'
+        mapping = mapping or "roman_simplex"
 
         font_size /= 21
         advance_height = 1.6 * 21 * font_size
 
         if not text_alignment:
-            text_alignment = 'left'
+            text_alignment = "left"
 
         shaped_text_lines = [
             pyhershey.shape_text(
-                text_line, advance_height=0, mapping=mapping, font_size=font_size, text_align=text_alignment
-            ) for text_line in text.split('\n')
+                text_line,
+                advance_height=0,
+                mapping=mapping,
+                font_size=font_size,
+                text_align=text_alignment,
+            )
+            for text_line in text.split("\n")
         ]
 
         glyph_groups = []
@@ -129,31 +145,37 @@ class Text(Group):
             for shaped_glyph in shaped_text_line:
                 glyph_polylines = []
 
-                for segment in shaped_glyph['glyph'].segments:
-
+                for segment in shaped_glyph["glyph"].segments:
                     # if np.allclose(segment[0], segment[-1]):
                     #     seg_shape = Polygon(segment)
                     # else:
                     #     seg_shape = Polyline(segment)
 
                     if stroke_width:
-                        glyph_polylines.append(self._add_stroke(Polyline(segment), stroke_width))
+                        glyph_polylines.append(
+                            self._add_stroke(Polyline(segment), stroke_width)
+                        )
                     else:
                         glyph_polylines.append(Polyline(segment))
 
                 if glyph_polylines:
                     glyph_groups.append(
-                        Group(glyph_polylines).transformed(translate(shaped_glyph['pos']) | translate((0, y_shift)))
+                        Group(glyph_polylines).transformed(
+                            translate(shaped_glyph["pos"]) | translate((0, y_shift))
+                        )
                     )
 
-            anchor_left = Vector(shaped_text_line[0]['pos']) + (0, y_shift)
-            anchor_right = Vector(shaped_text_line[-1]['pos']) + (shaped_text_line[-1]['glyph'].advance_width, y_shift)
+            anchor_left = Vector(shaped_text_line[0]["pos"]) + (0, y_shift)
+            anchor_right = Vector(shaped_text_line[-1]["pos"]) + (
+                shaped_text_line[-1]["glyph"].advance_width,
+                y_shift,
+            )
             anchor_center = Vector((anchor_left.x + anchor_right.x) / 2, y_shift)
 
             y_shift -= advance_height
 
             anchors.append(
-                {'left': anchor_left, 'center': anchor_center, 'right': anchor_right}
+                {"left": anchor_left, "center": anchor_center, "right": anchor_right}
             )
 
         self._n_lines = len(shaped_text_lines)
@@ -185,7 +207,9 @@ class Text(Group):
     def __mul__(self, other):
         if isinstance(other, U_):
             # from fibomat.layout.groups.dim_group import DimGroup
-            return DimText(self.elements, self._anchors, other, description=self.description)
+            return DimText(
+                self.elements, self._anchors, other, description=self.description
+            )
         raise NotImplementedError
 
 

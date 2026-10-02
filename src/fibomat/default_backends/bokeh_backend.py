@@ -77,6 +77,128 @@ class StubRasterStyle(RasterStyle):
         pass
 
 
+from bokeh.core.properties import Instance
+from bokeh.models import ColumnDataSource, CustomJS, Tool, Label, Node
+from bokeh.plotting import figure, show
+from bokeh.util.compiler import TypeScript
+
+CODE = """
+import {GestureTool, GestureToolView} from "models/tools/gestures/gesture_tool"
+import {ColumnDataSource} from "models/sources/column_data_source"
+import {Label} from "models/annotations/label"
+import {PanEvent} from "core/ui_events"
+import * as p from "core/properties"
+
+export class DrawToolView extends GestureToolView {
+  declare model: DrawTool
+
+  // this is executed when the pan/drag event starts
+  _pan_start(e: PanEvent): void {
+        const {frame} = this.plot_view
+        const {sx, sy} = e
+
+        if (!frame.bbox.contains(sx, sy))
+            return
+        const x = frame.x_scale.invert(sx)
+        const y = frame.y_scale.invert(sy)
+        this.model.source.data = {x: [x, x], y: [y, y]}
+  }
+
+  // this is executed on subsequent mouse/touch moves
+  _pan(e: PanEvent): void {
+    const {frame} = this.plot_view
+    const {sx, sy} = e
+
+    if (!frame.bbox.contains(sx, sy))
+      return
+
+    const x = frame.x_scale.invert(sx)
+    const y = frame.y_scale.invert(sy)
+
+    const {source} = this.model
+
+    source.get_array("x").pop()
+    source.get_array("y").pop()
+
+    source.get_array("x").push(x)
+    source.get_array("y").push(y)
+
+
+    const x_start = source.get_array("x")[0] as number
+    const x_end = source.get_array("x")[1] as number
+
+    const y_start = source.get_array("y")[0] as number
+    const y_end = source.get_array("y")[1] as number
+
+
+    const dx = x_end - x_start
+    const dy = y_end - y_start
+    const distance = Math.sqrt(dx * dx + dy * dy)
+
+    const angle_rad = Math.atan2(dy, dx)
+    const angle = angle_rad * 180 / Math.PI
+
+    this.model.label.text = "distance=" + Number(distance).toFixed(3) + ", angle= " + Number(angle).toFixed(2) + "° (" + Number(angle_rad).toFixed(2) + " rad)"
+
+    source.change.emit()
+
+
+
+  }
+
+  // this is executed then the pan/drag ends
+  _pan_end(_e: PanEvent): void {}
+}
+
+export namespace DrawTool {
+  export type Attrs = p.AttrsOf<Props>
+
+  export type Props = GestureTool.Props & {
+    source: p.Property<ColumnDataSource>,
+    label: p.Property<Label>,
+    better_label: p.Property<Label>,
+  }
+}
+
+export interface DrawTool extends DrawTool.Attrs {}
+
+export class DrawTool extends GestureTool {
+  declare properties: DrawTool.Props
+  declare __view_type__: DrawToolView
+
+  constructor(attrs?: Partial<DrawTool.Attrs>) {
+    super(attrs)
+  }
+
+  tool_name = "Draw Tool"
+  tool_icon = "bk-tool-icon-lasso-select"
+  event_type = "pan" as "pan"
+  default_order = 12
+
+  static {
+    this.prototype.default_view = DrawToolView
+
+    this.define<DrawTool.Props>(({Ref}) => ({
+      source: [ Ref(ColumnDataSource) ],
+      label: [ Ref(Label) ],
+    }))
+  }
+
+  override initialize(): void {
+      super.initialize()
+
+    }
+
+}
+"""
+
+
+class DrawTool(Tool):
+    __implementation__ = TypeScript(CODE)
+    source = Instance(ColumnDataSource)
+    label = Instance(Label)
+
+
 # if file = np.array, it should be dtype==uint32! (or16?)
 class BokehImage(DimShape):
     def __init__(
@@ -466,7 +588,7 @@ class BokehBackend(BokehBackendBase):
             ("mill", "@mill"),
             ("raster style", "@raster_style"),
             ("site", "@site_id"),
-            ("description", "@description")
+            ("description", "@description"),
             # ('mill_settings', '@mill_settings'),
         ]
 
@@ -612,6 +734,26 @@ class BokehBackend(BokehBackendBase):
         fig.legend.items.extend(sorted(legend_tmp, key=sorter))
 
         fig.legend.visible = self._legend
+
+        measure_source = ColumnDataSource(data=dict(x=[], y=[]))
+
+        frame_left = Node(target="frame", symbol="left", offset=5)
+        frame_bottom = Node(target="frame", symbol="bottom", offset=-5)
+        label = Label(
+            x=frame_left,
+            y=frame_bottom,
+            anchor="bottom_left",
+            text="",
+            padding=10,
+            # border_radius=5,
+            # border_line_color="black",
+            # background_fill_color="white",
+        )
+
+        fig.add_tools(DrawTool(source=measure_source, label=label))
+        fig.add_layout(label)
+
+        fig.line("x", "y", line_width=3, source=measure_source)
 
         # if self._image_annotation:
         #     self.fig = bl.column([bl.row([input_offset_x, input_offset_y]), fig], width_policy='max')

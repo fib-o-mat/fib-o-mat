@@ -1,19 +1,20 @@
 """Provides the :class:`Sample` class."""
-from fibomat.linalg.boundingboxes import boundingbox
-from fibomat.linalg.boundingboxes.dim_boundingbox import DimBoundingBox
-from typing import Optional, List, Union, TypeVar, Type, Set
-import re
-import dataclasses
 
-from fibomat.site import Site
-from fibomat.linalg import DimVectorLike
+import dataclasses
+import re
+from typing import List, Optional, Set, Type, TypeVar, Union
+
 from fibomat.backend import BackendBase, registry
-from fibomat.utils import PathLike
-from fibomat.shapes import DimShape
-from fibomat.pattern import Pattern
-from fibomat.layout import LayoutBase
 from fibomat.default_backends import BokehBackend, StubRasterStyle
 from fibomat.describable import Describable
+from fibomat.layout import LayoutBase
+from fibomat.linalg import DimVectorLike
+from fibomat.linalg.boundingboxes import boundingbox
+from fibomat.linalg.boundingboxes.dim_boundingbox import DimBoundingBox
+from fibomat.pattern import Pattern
+from fibomat.shapes import DimShape
+from fibomat.site import Site
+from fibomat.utils import PathLike
 
 
 @dataclasses.dataclass(frozen=True)
@@ -24,7 +25,7 @@ class _Annotation:
     description: Optional[str]
 
 
-BackendType = TypeVar('BackendType')
+BackendType = TypeVar("BackendType")
 
 
 class Sample(Describable):
@@ -34,6 +35,7 @@ class Sample(Describable):
     backends .
 
     """
+
     def __init__(self, *, description: Optional[str] = None):
         """
         Args:
@@ -45,10 +47,10 @@ class Sample(Describable):
         self._annotations: List[_Annotation] = []
 
     def create_site(
-            self,
-            dim_position: DimVectorLike,
-            dim_fov: Optional[DimVectorLike] = None,
-            description: Optional[str] = None
+        self,
+        dim_position: DimVectorLike,
+        dim_fov: Optional[DimVectorLike] = None,
+        description: Optional[str] = None,
     ) -> Site:
         """
         Creates and Site in-place (hence, the Site is automatically added to the sample). Patterns can be added to the
@@ -104,9 +106,10 @@ class Sample(Describable):
 
     @staticmethod
     def _export(
-        backend_class: Type[BackendType], sites: Union[Site, List[Site]],
+        backend_class: Type[BackendType],
+        sites: Union[Site, List[Site]],
         descr_pattern: Optional[Set[str]] = None,
-        **kwargs
+        **kwargs,
     ) -> BackendType:
         def _matches(description_) -> bool:
             for pattern in descr_pattern:
@@ -117,7 +120,9 @@ class Sample(Describable):
         exporter: Type[BackendBase] = backend_class(**kwargs)
         if isinstance(sites, Site):
             if descr_pattern:
-                print('Warning: ignoring descriptions in _export for single site export.')
+                print(
+                    "Warning: ignoring descriptions in _export for single site export."
+                )
             exporter.process_site(sites)
         else:
             for site_ in sites:
@@ -134,7 +139,13 @@ class Sample(Describable):
 
         return exporter
 
-    def plot(self, show: bool = True, filename: Optional[PathLike] = None, descr_pattern: Optional[Set[str]] = None, **kwargs) -> BokehBackend:
+    def plot(
+        self,
+        show: bool = True,
+        filename: Optional[PathLike] = None,
+        descr_pattern: Optional[Set[str]] = None,
+        **kwargs,
+    ) -> BokehBackend:
         """
         Plots and save the project using the :class:`~fibomat.default_backends.bokeh_backend.BokehBackend`.
 
@@ -149,14 +160,27 @@ class Sample(Describable):
             None
         """
 
-        plotter: BokehBackend = self._export(BokehBackend, self._sites, descr_pattern=descr_pattern, title=self._description, **kwargs)
+        plotter: BokehBackend = self._export(
+            BokehBackend,
+            self._sites,
+            descr_pattern=descr_pattern,
+            title=self._description,
+            **kwargs,
+        )
 
         for annot in self._annotations:
             raster = StubRasterStyle(2) if annot.filled else StubRasterStyle(1)
 
-            plotter.process_pattern(Pattern(
-                annot.dim_shape, None, raster, _annotation=True, _color=annot.color, description=annot.description
-            ))
+            plotter.process_pattern(
+                Pattern(
+                    annot.dim_shape,
+                    None,
+                    raster,
+                    _annotation=True,
+                    _color=annot.color,
+                    description=annot.description,
+                )
+            )
 
         plotter.plot()
 
@@ -167,7 +191,9 @@ class Sample(Describable):
 
         return plotter
 
-    def export(self, exp_backend: Union[str, Type[BackendBase]], **kwargs) -> BackendBase:
+    def export(
+        self, exp_backend: Union[str, Type[BackendBase]], **kwargs
+    ) -> BackendBase:
         """
         Exports the project. Note that the method returns the backend object so you will be able to save a file or show
         a plot. See backends example nd docs for details.
@@ -187,9 +213,13 @@ class Sample(Describable):
         if isinstance(exp_backend, str):
             exp_backend = registry.get(exp_backend)
 
-        return self._export(exp_backend, self._sites, description=self._description, **kwargs)
+        return self._export(
+            exp_backend, self._sites, description=self._description, **kwargs
+        )
 
-    def export_multi(self, exp_backend: Union[str, Type[BackendBase]], **kwargs) -> List[BackendBase]:
+    def export_multi(
+        self, exp_backend: Union[str, Type[BackendBase]], **kwargs
+    ) -> List[BackendBase]:
         """
         Similar to :meth:`Project.export` but for each :class:`fibomat.site.Site` an individual backend instance is
         returned.
@@ -206,12 +236,19 @@ class Sample(Describable):
             exp_backend = registry.get(exp_backend)
 
         for added_site in self._sites:
-            backends.append(self._export(exp_backend, added_site, description=self._description, **kwargs))
+            backends.append(
+                self._export(
+                    exp_backend, added_site, description=self._description, **kwargs
+                )
+            )
 
         return backends
 
     def export_with_description(
-        self, exp_backend: Union[str, Type[BackendBase]], descr_pattern: Set[str], **kwargs
+        self,
+        exp_backend: Union[str, Type[BackendBase]],
+        descr_pattern: Set[str],
+        **kwargs,
     ) -> BackendBase:
         """
         Exports the project. Note that the method returns the backend object so you will be able to save a file or show
@@ -234,10 +271,20 @@ class Sample(Describable):
         """
         if isinstance(exp_backend, str):
             exp_backend = registry.get(exp_backend)
-        return self._export(exp_backend, self._sites, description=self._description, descr_pattern=descr_pattern, **kwargs)
+        return self._export(
+            exp_backend,
+            self._sites,
+            description=self._description,
+            descr_pattern=descr_pattern,
+            **kwargs,
+        )
 
     def add_annotation(
-        self, dim_shape: DimShape, filled: bool = False, color: Optional[str] = None, description: Optional[str] = None
+        self,
+        dim_shape: DimShape,
+        filled: bool = False,
+        color: Optional[str] = None,
+        description: Optional[str] = None,
     ) -> None:
         """
         Add `dim_shape` to a annotation layer. This layer is only used to visualize extra shapes and is ignored by the
@@ -252,4 +299,8 @@ class Sample(Describable):
         Returns:
             None
         """
-        self._annotations.append(_Annotation(dim_shape=dim_shape, filled=filled, color=color, description=description))
+        self._annotations.append(
+            _Annotation(
+                dim_shape=dim_shape, filled=filled, color=color, description=description
+            )
+        )

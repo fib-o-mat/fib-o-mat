@@ -1,6 +1,17 @@
 """Provides the :class:`ArcSpline` and :class:`ArcSplineCompatible` classes."""
+
 from __future__ import annotations
-from typing import Optional, Union, Sequence, Iterable, Protocol, runtime_checkable, Tuple, List, Dict
+from typing import (
+    Optional,
+    Union,
+    Sequence,
+    Iterable,
+    Protocol,
+    runtime_checkable,
+    Tuple,
+    List,
+    Dict,
+)
 
 import numpy as np
 
@@ -13,6 +24,7 @@ from fibomat import _libfibomat
 @runtime_checkable
 class ArcSplineCompatible(Protocol):  # pylint: disable=too-few-public-methods
     """Abstract class can be used to mark ArcSpline compatible shapes."""
+
     def to_arc_spline(self) -> ArcSpline:
         """
         Transform shape to ArcSpline.
@@ -27,11 +39,13 @@ class ArcSpline(Shape, ArcSplineCompatible):
     """Class represents a spline containing circular arcs and straight line segments. The spline is C^0, hence,
     continuous but not differentiable.
     """
+
     def __init__(
-            self,
-            arc_spline: Union[_libfibomat.ArcSpline, np.ndarray],
-            is_closed: Optional[bool] = None,
-            description: Optional[str] = None):
+        self,
+        arc_spline: Union[_libfibomat.ArcSpline, np.ndarray],
+        is_closed: Optional[bool] = None,
+        description: Optional[str] = None,
+    ):
         """
         Args:
             arc_spline (_libfibomat.ArcSpline, np.ndarray):
@@ -51,14 +65,18 @@ class ArcSpline(Shape, ArcSplineCompatible):
             self._arc_spline = _libfibomat.ArcSpline(arc_spline)
         else:
             if is_closed is None:
-                raise ValueError('is_closed must be defined if ArcSpline is build from vertices.')
+                raise ValueError(
+                    "is_closed must be defined if ArcSpline is build from vertices."
+                )
             self._arc_spline = _libfibomat.ArcSpline(arc_spline, is_closed)
 
         # self._vertices = np.array(self._arc_spline.vertices)
         # self._vertices.flags.writeable = False
 
     def __copy__(self):
-        return self.__class__(arc_spline=self._arc_spline.clone(), description=self.description)
+        return self.__class__(
+            arc_spline=self._arc_spline.clone(), description=self.description
+        )
 
     def __deepcopy__(self, memodict):
         return self.__copy__()
@@ -69,7 +87,9 @@ class ArcSpline(Shape, ArcSplineCompatible):
     # shape.Shape methods
 
     @classmethod
-    def from_segments(cls, segments: Iterable[ArcSplineCompatible], description: Optional[str] = None):
+    def from_segments(
+        cls, segments: Iterable[ArcSplineCompatible], description: Optional[str] = None
+    ):
         """Build an ArcSpline from connected segments.
 
         Args:
@@ -87,18 +107,21 @@ class ArcSpline(Shape, ArcSplineCompatible):
         vertices: List[np.ndarray] = []
 
         for i_seg, seg in enumerate(segments):
-
             arc_spline = seg.to_arc_spline()
 
             if arc_spline.is_closed and i_seg > 0:
-                raise RuntimeError('Cannot build ArcSpline from segments because some segments are closed.')
+                raise RuntimeError(
+                    "Cannot build ArcSpline from segments because some segments are closed."
+                )
 
             seg_vertices = np.array(arc_spline.vertices)
 
             if vertices:
                 if not np.allclose(vertices[-1][-1, :2], seg_vertices[0, :2]):
-                    raise RuntimeError('Segments are not C^0. The distance is {}'.format(
-                        np.linalg.norm(vertices[-1][-1, :2] - seg_vertices[0, :2]))
+                    raise RuntimeError(
+                        "Segments are not C^0. The distance is {}".format(
+                            np.linalg.norm(vertices[-1][-1, :2] - seg_vertices[0, :2])
+                        )
                     )
                 vertices[-1][-1] = seg_vertices[0]
                 vertices.append(seg_vertices[1:])
@@ -125,7 +148,7 @@ class ArcSpline(Shape, ArcSplineCompatible):
         return segment.to_arc_spline()
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}(start={self.start}, end={self.end}, description={self.description})'
+        return f"{self.__class__.__name__}(start={self.start}, end={self.end}, description={self.description})"
 
     @property
     def is_closed(self) -> bool:
@@ -137,7 +160,10 @@ class ArcSpline(Shape, ArcSplineCompatible):
     # Transformable methods
 
     def clone(self) -> ArcSpline:
-        return self.__class__(arc_spline=self._arc_spline.clone(), description=self.description, )
+        return self.__class__(
+            arc_spline=self._arc_spline.clone(),
+            description=self.description,
+        )
 
     def clone_with_new_description(self, description: Optional[str] = None):
         """Similar to :meth:`ArcSpline.clone` but set the description the passed description.
@@ -148,7 +174,9 @@ class ArcSpline(Shape, ArcSplineCompatible):
         Returns:
             ArcSpline
         """
-        return self.__class__(arc_spline=self._arc_spline.clone(), description=description)
+        return self.__class__(
+            arc_spline=self._arc_spline.clone(), description=description
+        )
 
     @property
     def bounding_box(self) -> BoundingBox:
@@ -162,7 +190,7 @@ class ArcSpline(Shape, ArcSplineCompatible):
             bbox = segments[0].bounding_box
             for seg in segments[1:]:
                 bbox = bbox.extended(seg.bounding_box)
-            
+
             return bbox
         else:
             return BoundingBox(*self._arc_spline.bounding_box)
@@ -241,7 +269,7 @@ class ArcSpline(Shape, ArcSplineCompatible):
         from fibomat.shapes.arc import Arc  # pylint: disable=import-outside-toplevel
 
         def _make_segment(start_vertex, end_vertex):
-            if np.isclose(start_vertex[2], 0.):
+            if np.isclose(start_vertex[2], 0.0):
                 return Line(start_vertex[:2], end_vertex[:2])
 
             return Arc.from_bulge(start_vertex[:2], end_vertex[:2], start_vertex[2])
@@ -249,7 +277,7 @@ class ArcSpline(Shape, ArcSplineCompatible):
         segments = []
         vertices = self.vertices
         for i, vertex in enumerate(vertices[1:], start=1):
-            segments.append(_make_segment(vertices[i-1], vertex))
+            segments.append(_make_segment(vertices[i - 1], vertex))
 
         if self.is_closed:
             segments.append(_make_segment(vertices[-1], vertices[0]))
@@ -286,6 +314,10 @@ class ArcSpline(Shape, ArcSplineCompatible):
         """
         return self._arc_spline.length
 
+    @property
+    def area(self) -> float:
+        return abs(self._arc_spline.area)
+
     def contains(self, pos: VectorLike):
         pos = Vector(pos)
         return self._arc_spline.contains(pos.x, pos.y)
@@ -294,7 +326,7 @@ class ArcSpline(Shape, ArcSplineCompatible):
         pos = Vector(pos)
         res = self._arc_spline.closest_point(pos.x, pos.y)
 
-        return {'segment': pos[0], 'point': Vector(res[1]), 'distance': res[2]}
+        return {"segment": pos[0], "point": Vector(res[1]), "distance": res[2]}
 
     def unit_tangents(self, i_vertex: int) -> Tuple[Optional[Vector], Optional[Vector]]:
         """Unit tangents at vertex i_vertex.
@@ -319,19 +351,21 @@ class ArcSpline(Shape, ArcSplineCompatible):
             second_tangent = None
 
             if i_vertex != 0 or self.is_closed:
-                vertex_before = vertices[(i_vertex-1) % len(vertices)]
+                vertex_before = vertices[(i_vertex - 1) % len(vertices)]
 
-                if np.isclose(vertex_before[2], 0.):
+                if np.isclose(vertex_before[2], 0.0):
                     first_tangent = vertex[:2] - vertex_before[:2]
                     first_tangent /= np.linalg.norm(first_tangent)
                 else:
-                    arc = Arc.from_bulge(vertex_before[:2], vertex[:2], vertex_before[2])
+                    arc = Arc.from_bulge(
+                        vertex_before[:2], vertex[:2], vertex_before[2]
+                    )
                     first_tangent = arc.unit_tangent_end
 
             if i_vertex != self._arc_spline.size - 1 or self.is_closed:
-                vertex_next = vertices[(i_vertex+1) % len(vertices)]
+                vertex_next = vertices[(i_vertex + 1) % len(vertices)]
 
-                if np.isclose(vertex[2], 0.):
+                if np.isclose(vertex[2], 0.0):
                     second_tangent = vertex_next[:2] - vertex[:2]
                     second_tangent /= np.linalg.norm(second_tangent)
                 else:
@@ -340,7 +374,7 @@ class ArcSpline(Shape, ArcSplineCompatible):
 
             return first_tangent, second_tangent
 
-        raise ValueError('i_vertex >= number of segments.')
+        raise ValueError("i_vertex >= number of segments.")
 
     def kinks(self) -> List[int]:
         """Return kinks (non differentiable points) of the spline.
@@ -366,7 +400,9 @@ class ArcSpline(Shape, ArcSplineCompatible):
 
         return kinks
 
-    def segments_at_vertex(self, i_vertex: int) -> Tuple[Optional[Shape], Optional[Shape]]:
+    def segments_at_vertex(
+        self, i_vertex: int
+    ) -> Tuple[Optional[Shape], Optional[Shape]]:
         """Return the segments around the vertex with index i_vertex.
 
         Args:
@@ -390,24 +426,26 @@ class ArcSpline(Shape, ArcSplineCompatible):
             second_seg = None
 
             if i_vertex != 0 or self.is_closed:
-                vertex_before = vertices[(i_vertex-1) % len(vertices)]
+                vertex_before = vertices[(i_vertex - 1) % len(vertices)]
 
-                if np.isclose(vertex_before[2], 0.):
+                if np.isclose(vertex_before[2], 0.0):
                     first_seg = Line(vertex_before[:2], vertex[:2])
                 else:
-                    first_seg = Arc.from_bulge(vertex_before[:2], vertex[:2], vertex_before[2])
+                    first_seg = Arc.from_bulge(
+                        vertex_before[:2], vertex[:2], vertex_before[2]
+                    )
 
             if i_vertex != self._arc_spline.size - 1 or self.is_closed:
-                vertex_next = vertices[(i_vertex+1) % len(vertices)]
+                vertex_next = vertices[(i_vertex + 1) % len(vertices)]
 
-                if np.isclose(vertex[2], 0.):
+                if np.isclose(vertex[2], 0.0):
                     second_seg = Line(vertex[:2], vertex_next[:2])
                 else:
                     second_seg = Arc.from_bulge(vertex[:2], vertex_next[:2], vertex[2])
 
             return first_seg, second_seg
 
-        raise ValueError('i_vertex >= number of segments.')
+        raise ValueError("i_vertex >= number of segments.")
 
     def reversed(self):
         """Return a reversed copy of the arc spline

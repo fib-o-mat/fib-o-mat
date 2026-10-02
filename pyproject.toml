@@ -1,14 +1,22 @@
 [build-system]
 build-backend = "mesonpy"
-requires = ["meson-python", "bokeh>=3.1.1"]  # , , "node"
+requires = ["meson-python", "bokeh>=3.1.1"] # , , "node"
 
 [project]
 name = "fibomat"
 version = "0.6.0"
 description = "fib-o-mat is a toolbox to generate patterns for focused ion beam instruments."
 requires-python = ">=3.9"
-authors = [{name = "Victor Deinhart", email = "victor.deinhart@helmholtz-berlin.de"}]
-keywords = ["focused ion beam", "fib", "pattern", "patterning", "beam path generation"]
+authors = [
+    { name = "Victor Deinhart", email = "victor.deinhart@helmholtz-berlin.de" },
+]
+keywords = [
+    "focused ion beam",
+    "fib",
+    "pattern",
+    "patterning",
+    "beam path generation",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3 :: Only",
@@ -23,26 +31,47 @@ classifiers = [
     "Operating System :: POSIX",
     "Operating System :: Microsoft :: Windows",
 ]
-license = {text = "GPLv3"}
+license = { text = "GPLv3" }
 readme = "README.md"
 dependencies = [
-    "numpy", "scipy", "sympy", "pint", "splipy", "frozenlist", "pyhershey", "jinja2", 
+    "numpy",
+    "scipy",
+    "sympy",
+    "pint",
+    "splipy",
+    "frozenlist",
+    "jinja2",
+    # pyhershey
 ]
 
 
 [project.urls]
 Repository = "https://github.com/fib-o-mat/fib-o-mat"
-Documentation =  "https://fib-o-mat.readthedocs.io/en/latest/"
+Documentation = "https://fib-o-mat.readthedocs.io/en/latest/"
 
 [project.gui-scripts]
 beam_simulation = "fibomat.beam_simulation:run"
 
 [project.optional-dependencies]
 # TODO numba
-exporting = ["bokeh>=3.1.1", "svgwrite",  "marshmallow", "prettytable", "xmltodict", "colored", "pillow",]
+exporting = [
+    "bokeh>=3.1.1",
+    "svgwrite",
+    "marshmallow",
+    "prettytable",
+    "xmltodict",
+    "colored",
+    "pillow",
+]
 io = ["svgelements", "ezdxf"]
 gui = ["pyqt5", "vispy"]
-docs = ["setuptools", "sphinx", "recommonmark", "pydata_sphinx_theme", "sphinxemoji"]
+docs = [
+    "setuptools",
+    "sphinx",
+    "recommonmark",
+    "pydata_sphinx_theme",
+    "sphinxemoji",
+]
 testing = ["pytest", "pytest-coverage", "pytest-mock"]
 dev = ["bump2version", "twine"]
 
@@ -58,7 +87,18 @@ archs = ["auto64"]
 archs = ["auto64"]
 
 [tool.cibuildwheel]
-skip = ["*-win32", "*-manylinux_i686", "pp*", "cp36-*", "cp37-*", "cp38-*", "aarch64", "ppc64le", "s390x", "*musllinux*"]
+skip = [
+    "*-win32",
+    "*-manylinux_i686",
+    "pp*",
+    "cp36-*",
+    "cp37-*",
+    "cp38-*",
+    "aarch64",
+    "ppc64le",
+    "s390x",
+    "*musllinux*",
+]
 
 
 # [tool.pytest.ini_options]

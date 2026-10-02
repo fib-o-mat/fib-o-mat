@@ -1,13 +1,12 @@
-from typing import Optional, Sequence, List
 from collections import deque
+from typing import List, Optional, Sequence
 
 import numpy as np
 
-from fibomat.linalg import VectorLike, BoundingBox, Vector
-from fibomat.shapes.shape import Shape
-from fibomat.shapes.arc_spline import ArcSpline
-
 from fibomat.curve_tools import combine_curves
+from fibomat.linalg import BoundingBox, Vector, VectorLike
+from fibomat.shapes.arc_spline import ArcSpline
+from fibomat.shapes.shape import Shape
 
 
 class HollowArcSpline(Shape):
@@ -16,29 +15,31 @@ class HollowArcSpline(Shape):
         boundary: ArcSpline,
         holes: Optional[Sequence[ArcSpline]] = None,
         description: Optional[str] = None,
-        disable_checks=False
+        disable_checks=False,
     ):
         super().__init__(description)
 
         if not isinstance(boundary, ArcSpline):
-            raise TypeError('boundary must be an ArcSplines.')
+            raise TypeError("boundary must be an ArcSplines.")
 
         if not all(isinstance(hole, ArcSpline) for hole in holes):
-            raise TypeError('holes must be ArcSplines.')
+            raise TypeError("holes must be ArcSplines.")
 
         if not boundary.is_closed:
-            raise ValueError('boundary must be closed arc spline.')
+            raise ValueError("boundary must be closed arc spline.")
 
         if not holes:
             holes = []
 
         if not all(hole.is_closed for hole in holes):
-            raise ValueError('holes must be closed arc splines')
+            raise ValueError("holes must be closed arc splines")
 
         if disable_checks:
             self._boundary, self._holes = boundary, holes
         else:
-            self._boundary, self._holes = self._exclude_holes(boundary, self._merge_holes(holes))
+            self._boundary, self._holes = self._exclude_holes(
+                boundary, self._merge_holes(holes)
+            )
 
     @staticmethod
     def _exclude_holes(boundary: ArcSpline, holes: Sequence[ArcSpline]):
@@ -52,21 +53,27 @@ class HollowArcSpline(Shape):
             # if not combine_curves(boundary, hole, mode='intersect'):
             #     raise RuntimeError('Hole is not included in boundary.')
 
-            excluded = combine_curves(boundary, hole, mode='exclude')
+            excluded = combine_curves(boundary, hole, mode="exclude")
 
-            if not excluded['remaining']:
-                print(boundary.bounding_box, [hole.bounding_box for hole in holes], excluded)
+            if not excluded["remaining"]:
+                print(
+                    boundary.bounding_box,
+                    [hole.bounding_box for hole in holes],
+                    excluded,
+                )
                 # something strange happened
                 raise RuntimeError
-            if len(excluded['remaining']) == 1:
-                if len(excluded['remaining'][0].vertices) == len(boundary.vertices) and np.allclose(excluded['remaining'][0].vertices, boundary.vertices):
+            if len(excluded["remaining"]) == 1:
+                if len(excluded["remaining"][0].vertices) == len(
+                    boundary.vertices
+                ) and np.allclose(excluded["remaining"][0].vertices, boundary.vertices):
                     non_intersecting_holes.append(hole)
                 else:
-                    boundary = excluded['remaining'][0]
-            if len(excluded['remaining']) > 1:
+                    boundary = excluded["remaining"][0]
+            if len(excluded["remaining"]) > 1:
                 raise RuntimeError(
-                    'Shape is not simply connected.'
-                    'This is most likely caused by a hole cutting the shape in two or more pieces.'
+                    "Shape is not simply connected."
+                    "This is most likely caused by a hole cutting the shape in two or more pieces."
                 )
 
         return boundary, non_intersecting_holes
@@ -84,17 +91,17 @@ class HollowArcSpline(Shape):
 
                 for i in range(len(queue)):
                     if hole.bounding_box.overlaps_with(queue[i].bounding_box):
-                        union = combine_curves(hole, queue[i], mode='union')
+                        union = combine_curves(hole, queue[i], mode="union")
 
-                        if union['subtracted']:
+                        if union["subtracted"]:
                             raise RuntimeError(
-                                'Shape is not simply connected. '
-                                'This is most likely caused by holes which separate the shape in two or more parts.'
+                                "Shape is not simply connected. "
+                                "This is most likely caused by holes which separate the shape in two or more parts."
                             )
 
-                        if len(union['remaining']) == 1:
+                        if len(union["remaining"]) == 1:
                             del queue[i]
-                            queue.append(union['remaining'][0])
+                            queue.append(union["remaining"][0])
                             non_intersecting = False
                             break
 
@@ -117,6 +124,18 @@ class HollowArcSpline(Shape):
         return self.__class__.__name__
 
     @property
+    def area(self) -> float:
+        area = self._boundary.area
+
+        for hole in self._holes:
+            if hole.to_arc_spline().orientation:
+                area += hole.area
+            else:
+                area -= hole.area
+
+        return area
+
+    @property
     def is_closed(self) -> bool:
         return True
 
@@ -129,7 +148,9 @@ class HollowArcSpline(Shape):
         Returns:
             bool
         """
-        return self._boundary.contains(pos) and not any([hole.contains(pos) for hole in self._holes])
+        return self._boundary.contains(pos) and not any(
+            [hole.contains(pos) for hole in self._holes]
+        )
 
     @property
     def center(self) -> Vector:
@@ -162,6 +183,3 @@ class HollowArcSpline(Shape):
 
         for hole in self._holes:
             hole._impl_mirror(mirror_axis)
-
-
-

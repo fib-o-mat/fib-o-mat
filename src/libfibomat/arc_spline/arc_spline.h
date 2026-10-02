@@ -193,6 +193,11 @@ namespace fibomat
             return cavc::getPathLength(m_curve);
         }
 
+        [[nodiscard]] T area() const
+        {
+            return cavc::getArea(m_curve);
+        }
+
         [[nodiscard]] std::pair<T, T> center() const
         {
             auto center = std::accumulate(

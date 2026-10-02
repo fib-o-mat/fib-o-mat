@@ -1,6 +1,7 @@
 """
 Provides the :class:`BackendBase` class.
 """
+
 from typing import Dict, Callable, Type
 import inspect
 
@@ -285,7 +286,7 @@ class BackendBase(metaclass=BackendBaseMeta):
         raise NotImplementedError
 
     @shape_type(shapes.Ring)
-    def circle(self, ptn: Pattern[shapes.Ring]) -> None:
+    def ring(self, ptn: Pattern[shapes.Ring]) -> None:
         """
         Adds pattern with `Ring` as shape to the backend.
 

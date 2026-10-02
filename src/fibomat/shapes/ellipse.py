@@ -14,11 +14,14 @@ from fibomat.shapes.circle import Circle
 
 class Ellipse(Shape, ArcSplineCompatible):
     """2-dim ellipse."""
+
     def __init__(
         self,
-        a: float, b: float, theta: float = 0,
+        a: float,
+        b: float,
+        theta: float = 0,
         center: Optional[VectorLike] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
     ):
         """
 
@@ -33,8 +36,8 @@ class Ellipse(Shape, ArcSplineCompatible):
 
         # raise NotImplementedError
 
-        assert a > 0.
-        assert b > 0.
+        assert a > 0.0
+        assert b > 0.0
 
         # center, axis in pos. x direction, axis in pos. y direction (all unrotated)
         # self._axes = VectorArray(
@@ -42,7 +45,7 @@ class Ellipse(Shape, ArcSplineCompatible):
         #     (0., float(b))
         # ).rotated(float(theta))
 
-        self._norm_a_axes = Vector(1, 0.).rotated(float(theta))
+        self._norm_a_axes = Vector(1, 0.0).rotated(float(theta))
 
         self._a = float(a)
         self._b = float(b)
@@ -50,8 +53,9 @@ class Ellipse(Shape, ArcSplineCompatible):
         self._center = Vector(center) if center is not None else Vector()
 
     def __repr__(self) -> str:
-        return '{}(a={!r}, b={!r}, theta={!r}, center={!r})'.format(
-            self.__class__.__name__, self.a, self.b, self.theta, self.center)
+        return "{}(a={!r}, b={!r}, theta={!r}, center={!r})".format(
+            self.__class__.__name__, self.a, self.b, self.theta, self.center
+        )
 
     def to_arc_spline(self) -> ArcSpline:
         if np.isclose(self._a, self._b):
@@ -64,13 +68,15 @@ class Ellipse(Shape, ArcSplineCompatible):
         from sympy import sin, cos
 
         ellipse = ParametricCurve.from_sympy_curve(
-            Curve([self.a * cos(t), self.b * sin(t)], (t, 0, 2*np.pi)),
-            try_length_integration=False
+            Curve([self.a * cos(t), self.b * sin(t)], (t, 0, 2 * np.pi)),
+            try_length_integration=False,
         )
 
         ellipse_arc_spline = ellipse.to_arc_spline()
 
-        return ellipse_arc_spline.transformed(rotate(self.theta) | translate(self.center))
+        return ellipse_arc_spline.transformed(
+            rotate(self.theta) | translate(self.center)
+        )
 
     @property
     def a(self) -> float:
@@ -109,6 +115,10 @@ class Ellipse(Shape, ArcSplineCompatible):
         return self._norm_a_axes.angle_about_x_axis
 
     @property
+    def area(self) -> float:
+        return np.pi * self._a * self._b
+
+    @property
     def center(self) -> Vector:
         return self._center
 
@@ -119,10 +129,10 @@ class Ellipse(Shape, ArcSplineCompatible):
         # https://www.iquilezles.org/www/articles/ellipses/ellipses.htm
         u = np.array(self._a * self._norm_a_axes)
         # b axis os orthogoan to a axis
-        v = np.array((self._b * self._norm_a_axes).rotated(self.theta + np.pi/4))
+        v = np.array((self._b * self._norm_a_axes).rotated(self.theta + np.pi / 4))
 
-        w = np.sqrt(u*u + v*v)
-        return BoundingBox(self._center-w, self._center+w)
+        w = np.sqrt(u * u + v * v)
+        return BoundingBox(self._center - w, self._center + w)
 
     @property
     def is_closed(self) -> bool:

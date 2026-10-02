@@ -1,19 +1,21 @@
 """Provides the :class:`Describable` class."""
+
 from typing import Optional, TypeVar
 import copy
 
 
-T = TypeVar('T', bound='DimTransformable')  # pylint: disable=invalid-name
+T = TypeVar("T", bound="DimTransformable")  # pylint: disable=invalid-name
 
 
 class Describable:
     """This class handles optional descriptions in the fib-o-mat library."""
+
     def __init__(self, description: Optional[str] = None):
         """
         Args:
-            description (str, optional): description
+            # description (str, optional): description
         """
-       #  super().__init__()
+        #  super().__init__()
 
         self._description = str(description) if description else None
 
@@ -49,5 +51,3 @@ class Describable:
             Optional[str]
         """
         return self._description
-
-
