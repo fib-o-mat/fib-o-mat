@@ -1,6 +1,7 @@
 """Dimension-tagged scalar."""
 from __future__ import annotations
 
+import numbers
 import typing as t
 
 import pint  # type: ignore
@@ -22,6 +23,9 @@ class DimFloat(DimBase[D]):
     """
 
     __slots__ = ('_q',)
+
+    # numpy scalars on the left side of an operator defer to the reflected operators of this class
+    __array_ufunc__ = None
 
     def __init__(self, quantity: pint.Quantity) -> None:
         """
@@ -97,26 +101,40 @@ class DimFloat(DimBase[D]):
     __hash__ = None  # type: ignore[assignment]
 
     def __lt__(self, other: DimFloat[D]) -> bool:
+        if not isinstance(other, DimFloat):
+            return NotImplemented
         return bool(self._q < other._q)
 
     def __le__(self, other: DimFloat[D]) -> bool:
+        if not isinstance(other, DimFloat):
+            return NotImplemented
         return bool(self._q <= other._q)
 
     def __gt__(self, other: DimFloat[D]) -> bool:
+        if not isinstance(other, DimFloat):
+            return NotImplemented
         return bool(self._q > other._q)
 
     def __ge__(self, other: DimFloat[D]) -> bool:
+        if not isinstance(other, DimFloat):
+            return NotImplemented
         return bool(self._q >= other._q)
 
     def __add__(self, other: DimFloat[D]) -> DimFloat[D]:
+        if not isinstance(other, DimFloat):
+            return NotImplemented
         return DimFloat(self._q + other._q)
 
     def __sub__(self, other: DimFloat[D]) -> DimFloat[D]:
+        if not isinstance(other, DimFloat):
+            return NotImplemented
         return DimFloat(self._q - other._q)
 
     def __neg__(self) -> DimFloat[D]:
         return DimFloat(-self._q)
 
+    # Operands which are neither DimFloat nor a number (e.g. vectors) are refused with NotImplemented, so that python
+    # tries the reflected operation of the other operand and raises a TypeError otherwise.
     @t.overload
     def __mul__(self, other: float) -> DimFloat[D]: ...
     @t.overload
@@ -124,7 +142,9 @@ class DimFloat(DimBase[D]):
     def __mul__(self, other: t.Union[DimFloat[t.Any], float]) -> DimFloat[t.Any]:
         if isinstance(other, DimFloat):
             return DimFloat(self._q * other._q)
-        return DimFloat(self._q * other)
+        if isinstance(other, numbers.Real):
+            return DimFloat(self._q * other)
+        return NotImplemented
 
     __rmul__ = __mul__
 
@@ -135,7 +155,9 @@ class DimFloat(DimBase[D]):
     def __truediv__(self, other: t.Union[DimFloat[t.Any], float]) -> DimFloat[t.Any]:
         if isinstance(other, DimFloat):
             return DimFloat(self._q / other._q)
-        return DimFloat(self._q / other)
+        if isinstance(other, numbers.Real):
+            return DimFloat(self._q / other)
+        return NotImplemented
 
     def __float__(self) -> float:
         return float(self._q.magnitude)

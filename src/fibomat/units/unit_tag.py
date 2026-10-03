@@ -1,6 +1,7 @@
 """The :func:`unit` constructor (alias :data:`U_`) creating dimensioned values, e.g. ``4. * unit('m')``."""
 from __future__ import annotations
 
+import numbers
 import typing as t
 
 from fibomat.units.dim_float import DimFloat
@@ -24,7 +25,13 @@ class _UnitTag(t.Generic[D]):
         self._symbol = symbol
         self._dimension = dimension
 
+    # numpy scalars on the left side of the operator defer to __rmul__
+    __array_ufunc__ = None
+
     def __rmul__(self, value: float) -> DimFloat[D]:
+        if not isinstance(value, numbers.Real):
+            # e.g. vectors: let python try the reflected operation of the other operand
+            return NotImplemented
         return DimFloat.of(value, self._symbol, self._dimension)
 
     __mul__ = __rmul__  # unit('m') * 4. also works

@@ -442,6 +442,14 @@ class Vector(t.Sequence[S]):
         """Subtraction operation: other - self."""
         return self._new(self._other_array(other) - self._array)
 
+    def _attach_unit(self, tag: t.Any) -> t.Any:
+        """Create a :class:`DimVector` from self and a unit tag, e.g. ``unit('µm')``."""
+        if self._has_unit:
+            raise TypeError('Cannot attach a unit to a vector which already has a unit.')
+        from fibomat.linalg.vectors.dim_vector import DimVector  # pylint: disable=import-outside-toplevel
+
+        return DimVector.from_vector(self, tag)
+
     def __mul__(self, other: t.Any) -> t.Any:
         """Scalar multiplication: self * other.
 
@@ -450,25 +458,16 @@ class Vector(t.Sequence[S]):
         if isinstance(other, FloatTypes):
             return self._new(float(other) * self._array)
 
-        from fibomat.units import DimFloat  # pylint: disable=import-outside-toplevel
         from fibomat.units.unit_tag import _UnitTag  # pylint: disable=import-outside-toplevel,protected-access
 
         if isinstance(other, _UnitTag):
-            if self._has_unit:
-                raise TypeError('Cannot attach a unit to a vector which already has a unit.')
-            from fibomat.linalg.vectors.dim_vector import DimVector  # pylint: disable=import-outside-toplevel
-
-            return DimVector.from_vector(self, other)
-        if isinstance(other, DimFloat):
-            # DimFloat would happily multiply with anything, so refuse explicitly
-            raise TypeError('A vector cannot be multiplied with a dimensioned value.')
+            return self._attach_unit(other)
         return NotImplemented
 
-    def __rmul__(self: SelfT, other: t.Any) -> SelfT:
-        """Scalar multiplication: other * self."""
-        if isinstance(other, FloatTypes):
-            return self._new(float(other) * self._array)
-        return NotImplemented
+    def __rmul__(self, other: t.Any) -> t.Any:
+        """Scalar multiplication: other * self. ``unit('µm') * vector`` returns a :class:`DimVector`."""
+        # (the unit tag returns NotImplemented for vectors, so this method is called)
+        return self.__mul__(other)
 
     def __truediv__(self: SelfT, other: t.Any) -> SelfT:
         """Scalar division: self / other."""

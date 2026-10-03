@@ -188,3 +188,60 @@ class TestHelpers:
         assert has_time_dim(ureg.Unit('µs'))
         assert has_time_dim(unit('µs'))
         assert not has_time_dim(unit('m'))
+
+
+class TestOperandRefusal:
+    """Operands which are no numbers are refused (TypeError) instead of being wrapped into a quantity."""
+
+    class Dummy:
+        pass
+
+    def test_unit_tag_and_dim_float_refuse_non_numbers(self):
+        for operand in ('a', None, [1., 2.], self.Dummy(), (1., 2.)):
+            with pytest.raises(TypeError):
+                operand * unit('m')
+            with pytest.raises(TypeError):
+                unit('m') * operand
+            with pytest.raises(TypeError):
+                operand * (1. * unit('m'))
+            with pytest.raises(TypeError):
+                (1. * unit('m')) * operand
+            with pytest.raises(TypeError):
+                (1. * unit('m')) / operand
+
+    def test_dim_float_arithmetic_with_non_dim_float(self):
+        a = 1. * unit('m')
+        for op in (lambda: a + 1., lambda: a - 1., lambda: 1. + a, lambda: a + unit('m')):
+            with pytest.raises(TypeError):
+                op()
+        for op in (lambda: a < 1., lambda: a <= 1., lambda: a > 1., lambda: a >= 1.):
+            with pytest.raises(TypeError):
+                op()
+
+    def test_numpy_scalars(self):
+        for scalar in (np.float64(2.), np.float32(2.), np.int64(2)):
+            res = scalar * unit('m')
+            assert isinstance(res, DimFloat)
+            assert res.m_as('m') == pytest.approx(2.)
+            res = scalar * (1. * unit('m'))
+            assert isinstance(res, DimFloat)
+            assert (unit('m') * scalar).m_as('m') == pytest.approx(2.)
+            assert ((1. * unit('m')) * scalar).m_as('m') == pytest.approx(2.)
+
+    def test_numpy_array_is_refused(self):
+        with pytest.raises(TypeError):
+            np.array([1., 2.]) * unit('m')
+
+    def test_unit_times_vector_creates_dim_vector(self):
+        from fibomat.linalg.vectors import Vector, DimVector
+
+        for res in (Vector(1., 2.) * unit('um'), unit('um') * Vector(1., 2.)):
+            assert isinstance(res, DimVector)
+            assert res.y.m_as('um') == pytest.approx(2.)
+
+        with pytest.raises(TypeError):
+            unit('um') * DimVector(1. * unit('um'), 2. * unit('um'))
+        with pytest.raises(TypeError):
+            (1. * unit('um')) * Vector(1., 2.)
+        with pytest.raises(TypeError):
+            Vector(1., 2.) * (1. * unit('um'))

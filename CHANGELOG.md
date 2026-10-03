@@ -42,6 +42,7 @@ Rust extension and maturin build: commit `d3567de`.
 - The old tests in `tests/` (to be replaced step by step).
 
 ### Fixed
+- `fibomat.units`: `unit(...)` tags and `DimFloat` refused nothing: `unit('m') * vector` or `dim_float * vector` silently wrapped the operand into a quantity. Operands which are no numbers now yield `NotImplemented` (-> `TypeError`), comparisons and `+`/`-` with non-`DimFloat` operands raise `TypeError` instead of `AttributeError`, and numpy scalars/arrays on the left side use the reflected operators (`np.float64(2) * unit('m')` works, `np.array(...) * unit('m')` raises). `unit('µm') * Vector(1, 2)` now creates a `DimVector`, like `Vector(1, 2) * unit('µm')`.
 - `DimVector` no longer modifies the quantities passed to its constructor (`y.ito(x.u)`).
 - `DimVector` with nanometer-scale values in meters was treated as the null vector (`np.allclose` default tolerance); `angle_about_x_axis` checks for an exact null vector.
 - `angle_between`: wrong length check, `nan` for rounding errors (cosine out of [-1, 1]), wrong results for dim-vectors with different units, silent `nan` for null vectors (now `ValueError`). `signed_angle_between` converts units, too.
