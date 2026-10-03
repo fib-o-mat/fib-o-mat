@@ -8,43 +8,56 @@ on:
 
 jobs:
   build_wheels:
-    name: Build wheels on ${{ matrix.os }}
+    name: Build wheels on ${{ matrix.os }} (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-       os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        include:
+          - {os: ubuntu-latest, target: x86_64}
+          - {os: windows-latest, target: x64}
+          - {os: macos-13, target: x86_64}
+          - {os: macos-14, target: aarch64}
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          # fetch-depth: 0 
-          submodules: recursive
 
+      # the extension uses the stable ABI (abi3-py38), hence one wheel per platform covers all python versions >= 3.8
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.22.0
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          manylinux: 2_28
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
-          path: wheelhouse/*.whl
+          name: wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: dist/*.whl
 
   make_sdist:
     name: Make SDist
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-      with:
-        # fetch-depth: 0 
-        submodules: recursive
+      - uses: actions/checkout@v4
 
-    - name: Build SDist
-      run: pipx run build --sdist
+      - name: Build SDist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
 
-    - uses: actions/upload-artifact@v4
-      with:
-        name: cibw-sdist
-        path: dist/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist/*.tar.gz
+
+  test_rust:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --manifest-path rust/Cargo.toml
 
   upload_all:
     needs: [build_wheels, make_sdist]
@@ -53,7 +66,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: cibw-*
+          pattern: wheels-*
           path: dist
           merge-multiple: true
 

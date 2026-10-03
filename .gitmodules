@@ -1,6 +1,0 @@
-[submodule "src/libfibomat/cavc"]
-	path = src/libfibomat/cavc
-	url = https://github.com/jbuckmccready/CavalierContours
-[submodule "src/libfibomat/pybind11"]
-	path = src/libfibomat/pybind11
-	url = https://github.com/pybind/pybind11

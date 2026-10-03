@@ -1,0 +1,20 @@
+[package]
+name = "fibomat_native"
+version = "0.6.0"
+edition = "2021"
+description = "Native geometry kernel of fib-o-mat (python extension fibomat._libfibomat)"
+license = "GPL-3.0-only"
+publish = false
+
+[lib]
+name = "_libfibomat"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cavalier_contours = "0.9.0"
+numpy = "0.29.0"
+pyo3 = { version = "0.29.3", features = ["abi3-py38"] }
+
+[features]
+# enabled by maturin, disabled for `cargo test` (the tests link against libpython)
+extension-module = ["pyo3/extension-module"]

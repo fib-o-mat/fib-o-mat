@@ -8,12 +8,13 @@ fib-o-mat (`fibomat`) is a Python library for generating beam patterns for focus
 
 ## Build, install, test
 
-- The package is built with **meson-python** and contains a C++17 extension (`libfibomat`, pybind11 + CavalierContours) in `src/libfibomat`. The git submodules `src/libfibomat/cavc` and `src/libfibomat/pybind11` must be checked out (`git submodule update --init`).
-- Editable install for development: `pip install --no-build-isolation -e .[exporting,io,testing]` (the `_libfibomat` extension must be compiled; pure-Python imports of `fibomat` will fail without it). `pdm.lock` and local `.venv`/`.venv_314` virtualenvs exist.
+- The package is built with **maturin** and contains a Rust extension (`fibomat._libfibomat`, pyo3 + the `cavalier_contours` crate) in `rust/`. The crate uses the stable ABI (`abi3-py38`), so one wheel covers all Python versions >= 3.8. Maturin is configured in `[tool.maturin]` in `pyproject.toml`.
+- Editable install for development: `maturin develop --release` inside the activated virtualenv (set `VIRTUAL_ENV`, e.g. to `.venv_314`), plus `pip install -e .[exporting,io,testing]`-style extras for the optional dependencies. The `_libfibomat` extension must be compiled; imports of `fibomat.curve_tools`/`shapes` fail without it. `pdm.lock` and local `.venv`/`.venv_314` virtualenvs exist.
+- Rust tests: `cargo test --manifest-path rust/Cargo.toml`.
 - Tests: `pytest tests/`; single test: `pytest tests/test_mill.py::test_name`. `docs/scripts/run_tests.sh` runs coverage on `fibomat.mill`. pytest config in `pyproject.toml` is commented out.
 - Lint a file/dir: `docs/scripts/lint.sh <path>` (mypy, flake8, pylint, darglint, pydocstyle). Config in `.pylintrc`.
 - Bokeh measure tool (TypeScript, `bokeh-measuretool/`): `./bokeh_build.sh` builds it and copies `bokeh-measuretool.min.js` into `src/fibomat/default_backends/`. The built JS is committed.
-- **Adding/removing/renaming any file under `src/fibomat` requires regenerating the per-directory `meson.build` files** — run `python write_meson.py` from the repo root. Files not listed there are not installed into the wheel.
+- Python files under `src/fibomat` are picked up by maturin automatically (no per-file build lists).
 - Version is bumped with `bump2version` (`.bumpversion.cfg`; updates `pyproject.toml` and `src/fibomat/__init__.py`).
 - Docs examples live in `docs/examples/` (`run_all.sh`); the docs are Sphinx (`docs/`). Note `docs/src/` is a tracked copy of `src/`; the real source is `src/`.
 
@@ -23,7 +24,7 @@ Data model (top-level `src/fibomat/`): `Sample` → `Site`s (field of view + pos
 
 - **Units**: everything user-facing is dimensioned (pint, `U_`/`Q_` in `units.py`). `_dimensioned_object.DimensionedObj` and `shapes.DimShape` wrap a value plus a unit as `(obj, unit)` tuples; internally shapes/vectors are unitless and converted at the Site/Pattern boundary.
 - **`linalg`**: `Vector`/`DimVector`, `BoundingBox`, and the `Transformable`/`DimTransformable` mixins (translate/rotate/scale/mirror via `_impl_*` hooks) that shapes, patterns, sites and groups all share.
-- **`shapes`**: geometric primitives (Line, Arc, Polygon, Rect, Ring, Text, ParametricCurve, ArcSpline, …). `curve_tools`, `optimize`, `layout` (lattices, groups) and `from_file` (SVG/DXF) operate on them; heavy geometry (offsetting, boolean ops, SVG import, arc splines) is delegated to the C++ extension (typed in `_libfibomat.pyi`).
+- **`shapes`**: geometric primitives (Line, Arc, Polygon, Rect, Ring, Text, ParametricCurve, ArcSpline, …). `curve_tools`, `optimize`, `layout` (lattices, groups) and `from_file` (SVG/DXF) operate on them; heavy geometry (offsetting, boolean ops, SVG import, arc splines) is delegated to the Rust extension (`rust/src`, typed in `_libfibomat.pyi`; SVG import is done in Python via `svgelements`).
 - **`mill` / `raster_styles`**: `Mill` (dwell time, repeats; also `DDDMill`, `SILMill`) and rasterization strategies per dimensionality (`zero_d`, `one_d`, `two_d`, `default`). Rasterizing a pattern yields a `RasterizedPattern` / scan sequence.
 - **Backends** (`backend/`, `default_backends/`): `BackendBase` has one stub method per shape type; `BackendBaseMeta` introspects which shape methods a subclass implements (via the `@shape_type` decorator), so backends only implement the shapes they support and unsupported ones raise `ShapeNotSupportedError`. Backends are registered by name in the global `registry` (done in `default_backends/__init__.py`), and `Sample.export` accepts either the class or its registered name. Bundled: Bokeh (plotting), SpotList, PatterningDurationCalculator; vendor-specific ones live in subpackages (`fei`, `npve`, `smart_fib`). Bokeh/exporting deps are optional — `default_backends/__init__.py` falls back to stubs if they are missing.
 
