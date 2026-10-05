@@ -12,6 +12,7 @@ Rust extension and maturin build: commit `d3567de`.
 - `fibomat.linalg.transformables`: `TransformableBase` is removed (also from `fibomat.linalg`). `Transformable` is now generic (`Transformable[VectorT, BBoxT]`), `DimTransformable` derives from `Transformable[DimVector, DimBoundingBox]`. Arguments of `translated`, `translated_to`, `mirrored`, `transformed` and the `origin` arguments are converted to the vector type of the object before the `_impl_*` methods are called.
 - `fibomat.linalg.boundingboxes`: `BoundingBoxBase` is removed. `BoundingBox` is generic over the vector type and `DimBoundingBox` derives from `BoundingBox[DimVector]`. Boxes with and without units cannot be mixed (`TypeError`); `BoundingBox.corners` returns the corners in counterclockwise order (lower left, lower right, upper right, upper left); `from_points` accepts any iterable of vector-likes.
 - `rotate(...)`, `scale(...)` validate their arguments (`TypeError` for non-numbers, `ValueError` for non-finite values or a zero scale factor). The `|` operator creates a new transformation chain and no longer modifies its left operand.
+- `GeomLine.intersect_at_param` / `intersect_at` raise `ValueError` for parallel lines; `GeomLine.parallel_to` uses the sine of the angle (default tolerance 1e-8) instead of `cos ~ 1` (which treated angles up to ~0.26 degree as parallel).
 - `fibomat.linalg.vectors`: `VectorBase` is removed. `Vector` is now generic (`Vector[S]`) and implements all vector logic; `DimVector` derives from `Vector[DimFloat[LengthDimension]]` (components, `mag`, ... are `DimFloat`, `dot`/`cross` return area `DimFloat`). `angle_between` and `signed_angle_between` moved to `vector_functions.py` (still importable from `fibomat.linalg(.vectors)`).
 - `DimVector` accepts `DimFloat` components. `pint.Quantity` components are still accepted but emit a `DeprecationWarning`. `DimVector` and `Vector` can no longer be mixed in arithmetic (`VectorValueError`).
 - Floating point types such as `np.float32` are accepted as vector components.
@@ -24,8 +25,9 @@ Rust extension and maturin build: commit `d3567de`.
 - `requires-python` lowered from `>=3.9` to `>=3.8`; added the Python 3.8 classifier.
 
 ### Added
-- Tests for `Transformable`/`DimTransformable`, the transformation builders and `BoundingBox`/`DimBoundingBox` (`tests/test_transformables.py`, `tests/test_boundingboxes.py`).
+- Tests for `Transformable`/`DimTransformable`, the transformation builders, `BoundingBox`/`DimBoundingBox` and `fibomat.linalg.helpers` (`tests/test_transformables.py`, `tests/test_boundingboxes.py`, `tests/test_linalg_helpers.py`).
 - `BoundingBox * unit('µm')` and `unit('µm') * BoundingBox` create a `DimBoundingBox`.
+- `GeomLine.direction`, `GeomLine.support`, `GeomLine.__repr__`; `GeomLine.parallel_to(other, tol)`; `GeomLine.__call__` accepts arrays of parameters.
 - `DimVector.from_vector`, `DimVector.to`; `Vector * unit('µm')` creates a `DimVector`.
 - Tests for `Vector`, `DimVector` and the angle functions (`tests/test_vector.py`, `tests/test_dim_vector.py`).
 - Rust extension `fibomat._libfibomat` in `rust/` (pyo3 + `cavalier_contours` 0.9) with unit tests (`cargo test`, `tests/test_libfibomat.py`). Same python API as the former C++ extension (`ArcSpline`, `self_intersections`, `curve_intersections`, `combine_curves`, `offset_curve`, `offset_with_islands`, `convert_arcs_to_lines`).
@@ -52,6 +54,7 @@ Rust extension and maturin build: commit `d3567de`.
 - `BoundingBox.scaled(val)` scaled correctly only for `val == 2` (each side moved by `val / 4`); width and height are now scaled by `val` about the center. Non-positive factors raise `ValueError`.
 - `BoundingBox.extended` consumed generators when probing for a single vector and returned a wrong result; `BoundingBox.__eq__` raised `NotImplementedError` for non-boxes (now `False`).
 - `BoundingBox` rejects non-finite coordinates; `contains` and `overlaps_with` raise `TypeError` for boxes of the other kind instead of comparing quantities and floats.
+- `GeomLine`: `parallel_to` did not detect antiparallel lines; `find_param` printed debugging output, treated direction components below 1e-8 as zero and had no consistent check for tiny directions; `GeomLine.__init__` rejected short (but valid) directions (`np.allclose`); `__call__` failed for arrays of parameters.
 - `fibomat.units`: `unit(...)` tags and `DimFloat` refused nothing: `unit('m') * vector` or `dim_float * vector` silently wrapped the operand into a quantity. Operands which are no numbers now yield `NotImplemented` (-> `TypeError`), comparisons and `+`/`-` with non-`DimFloat` operands raise `TypeError` instead of `AttributeError`, and numpy scalars/arrays on the left side use the reflected operators (`np.float64(2) * unit('m')` works, `np.array(...) * unit('m')` raises). `unit('µm') * Vector(1, 2)` now creates a `DimVector`, like `Vector(1, 2) * unit('µm')`.
 - `DimVector` no longer modifies the quantities passed to its constructor (`y.ito(x.u)`).
 - `DimVector` with nanometer-scale values in meters was treated as the null vector (`np.allclose` default tolerance); `angle_about_x_axis` checks for an exact null vector.
