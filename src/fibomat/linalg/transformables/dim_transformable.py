@@ -1,36 +1,29 @@
-"""
-Provides the :class:`Transformable` class.
-"""
-from typing import Optional
+"""Provides the :class:`DimTransformable` class."""
+from __future__ import annotations
+
 import abc
+import typing as t
 
-from fibomat.linalg.transformables.transformable_base import TransformableBase
-from fibomat.linalg.vectors import DimVector, DimVectorLike
 from fibomat.linalg.boundingboxes import DimBoundingBox
-from fibomat.units import LengthQuantity
+from fibomat.linalg.transformables.transformable import Transformable
+from fibomat.linalg.vectors import DimVector
 
 
-class DimTransformable(TransformableBase[DimVector, LengthQuantity, DimBoundingBox], abc.ABC):
-    """
-    :class:`Transformable` is a base class providing the translate, rotate and uniform scale
-    transformations.
+__all__ = ['DimTransformable']
 
-    In order to use this mixin in a child class, the following methods and properties must be implemented:
-        * :attr:`Transformable.center`
-        * :meth:`Transformable.translate`
-        * :meth:`Transformable.simple_rotate`
-        * :meth:`Transformable.simple_scale`
 
+class DimTransformable(Transformable[DimVector, DimBoundingBox], abc.ABC):
+    """Base class providing the translate, rotate, scale and mirror transformations for objects with units.
+
+    It derives from :class:`Transformable` with :class:`DimVector` and :class:`DimBoundingBox`; see there for the
+    methods and properties which must be implemented. All vector arguments are converted to :class:`DimVector`.
     """
 
     _VectorClass = DimVector
 
-    def __init__(self, description: Optional[str] = None):
+    def __init__(self, description: t.Optional[str] = None):
         """
         Args:
-            pivot (VectorLike, optional): if set, the :attr:`Transformable.pivot` is set to `pivot`. If not set,
-                                           :attr:`Transformable.center` is used as default.
-
             description (str, optional): optional description
         """
         super().__init__(description=description)

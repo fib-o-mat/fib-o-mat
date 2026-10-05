@@ -9,6 +9,9 @@ Units rework: commit `14f2558`.
 Rust extension and maturin build: commit `d3567de`.
 
 ### Changed
+- `fibomat.linalg.transformables`: `TransformableBase` is removed (also from `fibomat.linalg`). `Transformable` is now generic (`Transformable[VectorT, BBoxT]`), `DimTransformable` derives from `Transformable[DimVector, DimBoundingBox]`. Arguments of `translated`, `translated_to`, `mirrored`, `transformed` and the `origin` arguments are converted to the vector type of the object before the `_impl_*` methods are called.
+- `fibomat.linalg.boundingboxes`: `BoundingBoxBase` is removed. `BoundingBox` is generic over the vector type and `DimBoundingBox` derives from `BoundingBox[DimVector]`. Boxes with and without units cannot be mixed (`TypeError`); `BoundingBox.corners` returns the corners in counterclockwise order (lower left, lower right, upper right, upper left); `from_points` accepts any iterable of vector-likes.
+- `rotate(...)`, `scale(...)` validate their arguments (`TypeError` for non-numbers, `ValueError` for non-finite values or a zero scale factor). The `|` operator creates a new transformation chain and no longer modifies its left operand.
 - `fibomat.linalg.vectors`: `VectorBase` is removed. `Vector` is now generic (`Vector[S]`) and implements all vector logic; `DimVector` derives from `Vector[DimFloat[LengthDimension]]` (components, `mag`, ... are `DimFloat`, `dot`/`cross` return area `DimFloat`). `angle_between` and `signed_angle_between` moved to `vector_functions.py` (still importable from `fibomat.linalg(.vectors)`).
 - `DimVector` accepts `DimFloat` components. `pint.Quantity` components are still accepted but emit a `DeprecationWarning`. `DimVector` and `Vector` can no longer be mixed in arithmetic (`VectorValueError`).
 - Floating point types such as `np.float32` are accepted as vector components.
@@ -21,6 +24,8 @@ Rust extension and maturin build: commit `d3567de`.
 - `requires-python` lowered from `>=3.9` to `>=3.8`; added the Python 3.8 classifier.
 
 ### Added
+- Tests for `Transformable`/`DimTransformable`, the transformation builders and `BoundingBox`/`DimBoundingBox` (`tests/test_transformables.py`, `tests/test_boundingboxes.py`).
+- `BoundingBox * unit('µm')` and `unit('µm') * BoundingBox` create a `DimBoundingBox`.
 - `DimVector.from_vector`, `DimVector.to`; `Vector * unit('µm')` creates a `DimVector`.
 - Tests for `Vector`, `DimVector` and the angle functions (`tests/test_vector.py`, `tests/test_dim_vector.py`).
 - Rust extension `fibomat._libfibomat` in `rust/` (pyo3 + `cavalier_contours` 0.9) with unit tests (`cargo test`, `tests/test_libfibomat.py`). Same python API as the former C++ extension (`ArcSpline`, `self_intersections`, `curve_intersections`, `combine_curves`, `offset_curve`, `offset_with_islands`, `convert_arcs_to_lines`).
@@ -42,6 +47,11 @@ Rust extension and maturin build: commit `d3567de`.
 - The old tests in `tests/` (to be replaced step by step).
 
 ### Fixed
+- `Transformable.rotated` and `scaled` returned the object itself (not a copy) for rotation angles close to 0 and scale factors close to 1, and silently skipped small but valid transformations (`np.isclose`). They always return a transformed clone now.
+- `Transformable.mirrored` did not convert its argument and accepted the null vector; the `pivot` documentation described a callable without parameters although the object is passed.
+- `BoundingBox.scaled(val)` scaled correctly only for `val == 2` (each side moved by `val / 4`); width and height are now scaled by `val` about the center. Non-positive factors raise `ValueError`.
+- `BoundingBox.extended` consumed generators when probing for a single vector and returned a wrong result; `BoundingBox.__eq__` raised `NotImplementedError` for non-boxes (now `False`).
+- `BoundingBox` rejects non-finite coordinates; `contains` and `overlaps_with` raise `TypeError` for boxes of the other kind instead of comparing quantities and floats.
 - `fibomat.units`: `unit(...)` tags and `DimFloat` refused nothing: `unit('m') * vector` or `dim_float * vector` silently wrapped the operand into a quantity. Operands which are no numbers now yield `NotImplemented` (-> `TypeError`), comparisons and `+`/`-` with non-`DimFloat` operands raise `TypeError` instead of `AttributeError`, and numpy scalars/arrays on the left side use the reflected operators (`np.float64(2) * unit('m')` works, `np.array(...) * unit('m')` raises). `unit('µm') * Vector(1, 2)` now creates a `DimVector`, like `Vector(1, 2) * unit('µm')`.
 - `DimVector` no longer modifies the quantities passed to its constructor (`y.ito(x.u)`).
 - `DimVector` with nanometer-scale values in meters was treated as the null vector (`np.allclose` default tolerance); `angle_about_x_axis` checks for an exact null vector.

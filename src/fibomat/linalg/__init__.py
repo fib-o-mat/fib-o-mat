@@ -62,12 +62,11 @@ from fibomat.linalg.transformables.transformable import Transformable
 from fibomat.linalg.transformables.dim_transformable import DimTransformable
 from fibomat.linalg.transformables.transformation_builder import translate, rotate, scale, mirror
 # from fibomat.linalg.dimvector import DimVector, DimVectorLike
-from fibomat.linalg.transformables.transformable_base import TransformableBase
 from fibomat.linalg.boundingboxes import BoundingBox, DimBoundingBox
 
 
 __all__ = [
     'Vector', 'VectorLike', 'DimVector', 'DimVectorLike', 'VectorValueError', 'angle_between', 'signed_angle_between',
-    'Transformable', 'DimTransformable', 'TransformableBase', 'translate', 'rotate', 'mirror', 'scale',
+    'Transformable', 'DimTransformable', 'translate', 'rotate', 'mirror', 'scale',
     'BoundingBox', 'DimBoundingBox'
 ]

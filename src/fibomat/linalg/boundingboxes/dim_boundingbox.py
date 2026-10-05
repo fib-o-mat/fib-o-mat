@@ -1,41 +1,36 @@
+"""Provides the :class:`DimBoundingBox` class."""
 from __future__ import annotations
-from typing import Iterable, Any
+
+import typing as t
 
 import numpy as np
 
-from fibomat.linalg.boundingboxes.boundingbox_base import BoundingBoxBase
-from fibomat.linalg.vectors import DimVector, DimVectorLike
-from fibomat.units import LengthQuantity, scale_factor, U_
+from fibomat.linalg.boundingboxes.boundingbox import BoundingBox
+from fibomat.linalg.vectors import DimVector, Vector
 
 
-class DimBoundingBox(BoundingBoxBase[DimVector, LengthQuantity]):
+__all__ = ['DimBoundingBox']
+
+
+class DimBoundingBox(BoundingBox[DimVector]):
+    """Axis aligned rectangular bounding box with lengths as coordinates.
+
+    Corners, width, height and area are :class:`DimVector` and :class:`~fibomat.units.DimFloat`.
+
+    Example::
+
+        box = DimBoundingBox(Vector(0, 0) * unit('µm'), Vector(2, 1) * unit('µm'))
+        box.width  # 2 µm
+    """
+
     _VectorClass = DimVector
 
     @classmethod
-    def from_points(cls, points: Iterable[DimVector]) -> DimBoundingBox:
-        """
-        Constructs rectangular bounding box containing all `points`
-
-        Args:
-            points (VectorArrayLike): points which should be included in bounding box
-
-        Returns:
-            (BoundingBox): new `BoundingBox`
-        """
-        point_iter = iter(points)
-
-        try:
-            first_point = DimVector(next(point_iter))
-        except StopIteration as stop_exception:
-            raise ValueError('points must contain at least one point') from stop_exception
-
-        unit = first_point.unit
-        points_scaled = [first_point.vector]
-
-        for point in point_iter:
-            dim_point = DimVector(point)
-            points_scaled.append((dim_point * scale_factor(unit, dim_point.unit)).vector)
-
-        points = np.asarray(points_scaled)
-
-        return DimBoundingBox(np.min(points, axis=0) * unit, np.max(points, axis=0) * unit)
+    def _from_vectors(cls, vectors: t.Sequence[DimVector]) -> DimBoundingBox:  # type: ignore[override]
+        # all points are converted to the unit of the first one
+        unit = vectors[0].unit
+        array = np.array([np.asarray(vector.vector_as(unit)) for vector in vectors])
+        return cls(
+            DimVector.from_vector(Vector(np.min(array, axis=0)), unit),
+            DimVector.from_vector(Vector(np.max(array, axis=0)), unit),
+        )
