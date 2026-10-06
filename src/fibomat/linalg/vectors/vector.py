@@ -424,22 +424,40 @@ class Vector(t.Sequence[S]):
     # arithmetics
     # ------------------------------------------------------------------------------------------------------------------
 
-    def __add__(self: SelfT, other: t.Iterable[t.Any]) -> SelfT:
-        """Add operation: self + other."""
+    def _is_array_of_points(self, other: t.Any) -> bool:
+        """Check if `other` is an array of several points (shape (..., 2)), which is combined with this vector by
+        numpy broadcasting (only for vectors without unit)."""
+        return (
+            not self._has_unit and isinstance(other, np.ndarray) and other.ndim >= 2 and other.shape[-1] == 2
+        )
+
+    def __add__(self: SelfT, other: t.Iterable[t.Any]) -> t.Any:
+        """Add operation: self + other. If `other` is an array of points (shape (n, 2)), a numpy array is returned."""
+        if self._is_array_of_points(other):
+            return np.asarray(other) + self._array
         return self._new(self._array + self._other_array(other))
 
-    def __radd__(self: SelfT, other: t.Any) -> SelfT:
-        """Add operation: other + self. ``0 + vector`` is supported, so that `sum` works."""
+    def __radd__(self: SelfT, other: t.Any) -> t.Any:
+        """Add operation: other + self. ``0 + vector`` is supported, so that `sum` works. If `other` is an array of
+        points (shape (n, 2)), a numpy array is returned."""
         if isinstance(other, FloatTypes) and other == 0:
             return self._new(self._array)
+        if self._is_array_of_points(other):
+            return np.asarray(other) + self._array
         return self._new(self._other_array(other) + self._array)
 
-    def __sub__(self: SelfT, other: t.Iterable[t.Any]) -> SelfT:
-        """Subtraction operation: self - other."""
+    def __sub__(self: SelfT, other: t.Iterable[t.Any]) -> t.Any:
+        """Subtraction operation: self - other. If `other` is an array of points (shape (n, 2)), a numpy array is
+        returned."""
+        if self._is_array_of_points(other):
+            return self._array - np.asarray(other)
         return self._new(self._array - self._other_array(other))
 
-    def __rsub__(self: SelfT, other: t.Iterable[t.Any]) -> SelfT:
-        """Subtraction operation: other - self."""
+    def __rsub__(self: SelfT, other: t.Iterable[t.Any]) -> t.Any:
+        """Subtraction operation: other - self. If `other` is an array of points (shape (n, 2)), a numpy array is
+        returned."""
+        if self._is_array_of_points(other):
+            return np.asarray(other) - self._array
         return self._new(self._other_array(other) - self._array)
 
     def _attach_unit(self, tag: t.Any) -> t.Any:

@@ -340,3 +340,36 @@ class TestAngles:
             warnings.simplefilter('error')
             angle_between((1, 0), (0, 1))
             Vector(1., 2.).normalized()
+
+
+class TestArraysOfPoints:
+    """Arrays of points (shape (n, 2)) are combined with a vector by numpy broadcasting."""
+
+    def test_add_sub(self):
+        points = np.array([[0., 0.], [1., 2.], [3., 4.]])
+        v = Vector(1., 1.)
+        for res, expected in (
+            (points + v, points + 1.), (v + points, points + 1.), (points - v, points - 1.), (v - points, 1. - points)
+        ):
+            assert isinstance(res, np.ndarray)
+            assert res == pytest.approx(expected)
+
+    def test_single_point_array_is_a_vector(self):
+        assert isinstance(np.array([1., 2.]) + Vector(1, 1), Vector)
+
+    def test_three_dimensional_array(self):
+        points = np.zeros((2, 3, 2))
+        assert (points + Vector(1, 2)).shape == (2, 3, 2)
+
+    def test_dim_vector_is_not_combined_with_plain_arrays(self):
+        from fibomat.linalg import DimVector
+
+        points = np.zeros((3, 2))
+        with pytest.raises(VectorValueError):
+            Vector(1, 1) * unit('µm') + points
+        with pytest.raises(VectorValueError):
+            points + DimVector(1 * unit('µm'), 1 * unit('µm'))
+
+    def test_wrong_shape(self):
+        with pytest.raises(VectorValueError):
+            Vector(1, 1) + np.zeros((3, 3))

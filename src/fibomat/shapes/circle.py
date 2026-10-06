@@ -1,25 +1,33 @@
-"""Provides the :class:`Circle` class."""
+"""Provides the :class:`Circle` class.
 
+Example::
+
+    from fibomat.shapes import Circle
+
+    circle = Circle(r=2, center=(1, 1))
+    circle.area, circle.boundary_length, circle.bounding_box
+    Circle.from_points((1, 0), (0, 1), (-1, 0))  # circumscribed circle
+"""
 # pylint: disable=invalid-name
 from __future__ import annotations
-from typing import Optional
+
+import typing as t
 
 import numpy as np
 
+from fibomat.linalg import BoundingBox, Vector, VectorLike
+from fibomat.shapes.arc_spline import ArcSpline
+from fibomat.shapes.arc_spline_compatible import ArcSplineCompatible
 from fibomat.shapes.shape import Shape
-from fibomat.linalg import Vector, VectorLike, BoundingBox
-from fibomat.shapes.arc_spline import ArcSpline, ArcSplineCompatible
+
+
+__all__ = ['Circle']
 
 
 class Circle(Shape, ArcSplineCompatible):
     """2-dim circle."""
 
-    def __init__(
-        self,
-        r: float,
-        center: Optional[VectorLike] = None,
-        description: Optional[str] = None,
-    ):
+    def __init__(self, r: float, center: t.Optional[VectorLike] = None, description: t.Optional[str] = None):
         """
 
         Args:
@@ -28,23 +36,22 @@ class Circle(Shape, ArcSplineCompatible):
             description (str, optional): description
 
         Raises:
-            ValueError: Raised if r <= 0.
+            ValueError: Raised if r <= 0 or r or the center are not finite.
         """
         super().__init__(description)
 
         self._center = Vector(center) if center is not None else Vector()
         self._r = float(r)
-        if self._r <= 0:
-            raise ValueError("radius <= 0.")
+
+        if not np.isfinite(self._r) or self._r <= 0.:
+            raise ValueError('radius must be positive and finite.')
+        if not np.all(np.isfinite(np.asarray(self._center))):
+            raise ValueError('center must be finite.')
 
     @classmethod
     def from_points(
-        cls,
-        p1: VectorLike,
-        p2: VectorLike,
-        p3: VectorLike,
-        description: Optional[str] = None,
-    ):
+        cls, p1: VectorLike, p2: VectorLike, p3: VectorLike, description: t.Optional[str] = None
+    ) -> Circle:
         """Create circumscribed circle (from three points).
 
         Args:
@@ -55,26 +62,30 @@ class Circle(Shape, ArcSplineCompatible):
 
         Returns:
             Circle
+
+        Raises:
+            ValueError: Raised if two points are equal or the points are collinear.
         """
         # https://en.wikipedia.org/wiki/Circumscribed_circle#Cartesian_coordinates_2
         a = Vector(p1)  # A
         b = Vector(p2) - a  # B
         c = Vector(p3) - a  # C
 
-        inv_d = 1 / (2 * (b.x * c.y - b.y * c.x))
+        det = 2 * b.cross(c)
+        b2 = b.dot(b)
+        c2 = c.dot(c)
 
-        b2 = b.x * b.x + b.y * b.y
-        c2 = c.x * c.x + c.y * c.y
+        if b2 == 0. or c2 == 0. or (Vector(p3) - Vector(p2)).mag == 0.:
+            raise ValueError('The circle through points is only defined for three different points.')
+        if abs(det) <= 1e-12 * max(b2, c2):
+            raise ValueError('The circle through points is only defined for points which are not collinear.')
 
-        u = Vector(inv_d * (c.y * b2 - b.y * c2), inv_d * (b.x * c2 - c.x * b2))
-        r = np.sqrt(u.x * u.x + u.y * u.y)
+        u = Vector((c.y * b2 - b.y * c2) / det, (b.x * c2 - c.x * b2) / det)
 
-        return cls(r, u + a, description)
+        return cls(u.mag, u + a, description)
 
     def __repr__(self) -> str:
-        return "{}(r={!r}, center={!r})".format(
-            self.__class__.__name__, self.r, self.center
-        )
+        return '{}(r={!r}, center={!r})'.format(self.__class__.__name__, self.r, self.center)
 
     def to_arc_spline(self) -> ArcSpline:
         return ArcSpline(
@@ -87,7 +98,7 @@ class Circle(Shape, ArcSplineCompatible):
         )
 
     @property
-    def r(self) -> float:
+    def r(self) -> float:  # pylint: disable=invalid-name
         """Radius.
 
         Access:
@@ -104,27 +115,39 @@ class Circle(Shape, ArcSplineCompatible):
 
     @property
     def area(self) -> float:
-        return np.pi * self._r**2
+        return float(np.pi * self._r ** 2)
+
+    @property
+    def boundary_length(self) -> float:
+        """Circumference of the circle.
+
+        Access:
+            get
+
+        Returns:
+            float
+        """
+        return float(2 * np.pi * self._r)
 
     @property
     def bounding_box(self) -> BoundingBox:
-        return BoundingBox(
-            self._center - (self._r, self._r), self._center + (self._r, self._r)
-        )
+        return BoundingBox(self._center - (self._r, self._r), self._center + (self._r, self._r))
 
     @property
     def is_closed(self) -> bool:
         return True
 
-    def _impl_translate(self, trans_vec: VectorLike) -> None:
-        self._center += Vector(trans_vec)
+    def _impl_translate(self, trans_vec: Vector) -> None:
+        self._center = self._center + Vector(trans_vec)
 
     def _impl_rotate(self, theta: float) -> None:
         self._center = self._center.rotated(theta)
 
     def _impl_scale(self, fac: float) -> None:
-        self._center *= float(fac)
-        self._r *= float(fac)
+        fac = float(fac)
+        self._center = self._center * fac
+        # a negative factor is a point reflection, which maps a circle to a circle with radius abs(fac) * r
+        self._r *= abs(fac)
 
-    def _impl_mirror(self, mirror_axis: VectorLike) -> None:
+    def _impl_mirror(self, mirror_axis: Vector) -> None:
         self._center = self._center.mirrored(mirror_axis)

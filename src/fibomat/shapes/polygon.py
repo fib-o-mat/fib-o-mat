@@ -1,23 +1,41 @@
-"""Provides the :class:`Polygon` class."""
+"""Provides the :class:`Polygon` class.
 
-from typing import Optional, List
+Example::
+
+    from fibomat.shapes import Polygon
+
+    triangle = Polygon([(0, 0), (1, 0), (0, 1)])
+    triangle.area  # 0.5
+
+    Polygon.regular_ngon(6, radius=2, center=(1, 1))
+"""
+from __future__ import annotations
+
+import typing as t
 
 import numpy as np
 
-from fibomat.shapes import polyline
-from fibomat.linalg import VectorLike, Vector
+from fibomat.linalg import Vector, VectorLike
+from fibomat.shapes.polyline import Polyline
 
 
-class Polygon(polyline.Polyline):
+__all__ = ['Polygon']
+
+
+class Polygon(Polyline):
     """2-dim polygon (closed polyline)."""
 
-    def __init__(self, points: List[VectorLike], description: Optional[str] = None):
+    def __init__(self, points: t.Iterable[VectorLike], description: t.Optional[str] = None):
         """
         .. note:: `point[0]` and `point[-1]` are automatically connected. Hence, `point[0] != point[-1]` usually.
 
         Args:
-            points (VectorArrayLike): polygon points.
+            points (Iterable[VectorLike], np.ndarray): polygon points (at least two), array of shape (n, 2)
             description (str, optional): description
+
+        Raises:
+            VectorValueError: Raised if points are no vectors.
+            ValueError: Raised if there are less than two points or points are not finite.
         """
         super().__init__(points, description, _closed=True)
 
@@ -27,15 +45,15 @@ class Polygon(polyline.Polyline):
         n: int,
         radius: float = 1.0,
         circumcircle: bool = True,
-        center: Optional[VectorLike] = None,
-        description: Optional[str] = None,
-    ):
+        center: t.Optional[VectorLike] = None,
+        description: t.Optional[str] = None,
+    ) -> Polygon:
         """
-        Creates an regular polygon.
+        Creates an regular polygon. The polygon is symmetric about the x axis (a side is orthogonal to the x axis).
 
         Args:
             n (int): number of corners
-            radius: cirumcircle or incircle radius
+            radius: circumcircle or incircle radius
             circumcircle (bool): if true, radius is treated as circumcircle radius else as incircle radius
             center (VectorLike, optional): center of ngon, default to (0, 0)
             description (str, optional): description
@@ -44,13 +62,17 @@ class Polygon(polyline.Polyline):
             Polygon
 
         Raises:
-            ValueError: Raised of n < 3 or radius <= 0.
+            ValueError: Raised if n < 3, n is no integer or radius <= 0 (or not finite).
         """
-        if n < 3:
-            raise ValueError("n < 3")
+        if int(n) != n:
+            raise ValueError('n must be an integer.')
+        n = int(n)
 
-        if radius <= 0.0:
-            raise ValueError("radius <= 0.")
+        if n < 3:
+            raise ValueError('n < 3')
+
+        if not np.isfinite(radius) or radius <= 0.0:
+            raise ValueError('radius <= 0.')
 
         if not circumcircle:
             radius = radius / np.cos(np.pi / n)
@@ -71,4 +93,4 @@ class Polygon(polyline.Polyline):
 
     @property
     def area(self) -> float:
-        return self.to_arc_spline().area
+        return self._polygon.area
