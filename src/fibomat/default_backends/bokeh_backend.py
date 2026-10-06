@@ -12,7 +12,7 @@ import numpy as np
 import PIL.Image
 from bokeh.util import compiler
 from bokeh.util.compiler import AttrDict, set_cache_hook
-from fibomat import layout, shapes
+from fibomat import layout, shapes, composite_shapes
 from fibomat.linalg.vectors import DimVector, DimVectorLike
 from fibomat.backend import BackendBase
 from fibomat.backend.backendbase import ShapeNotSupportedError, shape_type
@@ -837,7 +837,7 @@ class BokehBackend(BokehBackendBase):
     def _dispatch_pattern(self, ptn):
         if not ptn.dim_shape.shape.is_closed:
             self._non_filled_curve(ptn)
-        elif isinstance(ptn.dim_shape.shape, shapes.HollowArcSpline):
+        elif isinstance(ptn.dim_shape.shape, composite_shapes.HollowArcSpline):
             self._filled_curve_with_holes(ptn)
         elif ptn.raster_style.dimension < 2:
             self._non_filled_curve(ptn)
@@ -884,7 +884,7 @@ class BokehBackend(BokehBackendBase):
         else:
             self._bokeh_sites[-1].filled_curve(new_pattern, hatch_pattern="/")
 
-    def hollow_arc_spline(self, ptn: Pattern[shapes.HollowArcSpline]) -> None:
+    def hollow_arc_spline(self, ptn: Pattern[composite_shapes.HollowArcSpline]) -> None:
         self._dispatch_pattern(ptn)
 
     def bokeh_image(self, ptn: Pattern[BokehImage]):

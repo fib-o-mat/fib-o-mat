@@ -13,16 +13,15 @@ from fibomat.backend import BackendBase
 from fibomat.sample import Sample
 from fibomat.site import Site
 from fibomat.pattern import Pattern
+from fibomat.composite_shapes import HollowArcSpline, Ring
 from fibomat.shapes import (
     Rect,
     Polygon,
     Polyline,
     Circle,
-    HollowArcSpline,
     Spot,
     Line,
     Ellipse,
-    Ring,
 )
 from fibomat.units import (
     U_,

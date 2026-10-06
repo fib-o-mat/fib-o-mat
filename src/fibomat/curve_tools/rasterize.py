@@ -1,5 +1,7 @@
 """Provide rasterization routines."""
-from typing import List, Tuple, Optional, Dict, Any, Union
+from __future__ import annotations
+
+from typing import List, Tuple, Optional, Dict, Any, Union, TYPE_CHECKING
 
 import numpy as np
 
@@ -14,11 +16,14 @@ from fibomat.shapes.polyline import Polyline
 from fibomat.shapes.rasterizedpoints import RasterizedPoints
 from fibomat.shapes.shape import Shape
 from fibomat.shapes.arc_spline import ArcSplineCompatible, ArcSpline
-from fibomat.shapes.hollow_arc_spline import HollowArcSpline
 from fibomat.linalg import Vector, translate, rotate, VectorLike, BoundingBox
 from fibomat.curve_tools.intersections import curve_intersections
 from fibomat.shapes._line_non_continuous import LineNonContinuous
 from fibomat import _libfibomat
+
+if TYPE_CHECKING:  # pragma: no cover
+    # (the composite shapes are imported lazily, they depend on this package)
+    from fibomat.composite_shapes.hollow_arc_spline import HollowArcSpline
 
 
 def _rasterize_arc_spline_non_continuous_curve(
@@ -190,6 +195,8 @@ def fill_with_lines(
 
     # TODO: cache spatial tree for intersection calculations
 
+    from fibomat.composite_shapes.hollow_arc_spline import HollowArcSpline  # pylint: disable=import-outside-toplevel
+
     if isinstance(shape, ArcSpline):
         curve = shape
         if not curve.is_closed:
@@ -287,6 +294,8 @@ def fill_with_spiral(shape: Union[ArcSpline, HollowArcSpline], pitch: float) -> 
 
         
     """
+    from fibomat.composite_shapes.hollow_arc_spline import HollowArcSpline  # pylint: disable=import-outside-toplevel
+
     if isinstance(shape, ArcSpline):
         curve = shape
         if not curve.is_closed:

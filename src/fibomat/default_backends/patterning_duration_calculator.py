@@ -4,15 +4,14 @@ from typing import override
 import numpy as np
 from prettytable import PrettyTable
 
-from fibomat import shapes
+from fibomat import shapes, composite_shapes
 from fibomat.backend.backendbase import BackendBase
 from fibomat.pattern import Pattern
 from fibomat.raster_styles import one_d, two_d
+from fibomat.composite_shapes import HollowArcSpline, Ring
 from fibomat.shapes import (
     ArcSpline,
     Ellipse,
-    HollowArcSpline,
-    Ring,
     Shape,
 )
 from fibomat.site import Site
@@ -206,7 +205,7 @@ class PatterningDurationCalculator(BackendBase):
         self._process_pattern(ptn)
 
     @override
-    def hollow_arc_spline(self, ptn: Pattern[shapes.HollowArcSpline]) -> None:
+    def hollow_arc_spline(self, ptn: Pattern[composite_shapes.HollowArcSpline]) -> None:
         self._process_pattern(ptn)
 
     @override

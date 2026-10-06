@@ -11,10 +11,7 @@ from fibomat.shapes.ellipse import Ellipse
 from fibomat.shapes.parametric_curve import ParametricCurve
 from fibomat.shapes.arc import Arc
 from fibomat.shapes.rasterizedpoints import RasterizedPoints
-from fibomat.shapes.hollow_arc_spline import HollowArcSpline
 from fibomat.shapes.biarc import Biarc
-from fibomat.shapes.text import Text
-from fibomat.shapes.ring import Ring
 
 
 __all__ = [
@@ -30,10 +27,21 @@ __all__ = [
     "ParametricCurve",
     "Arc",
     "RasterizedPoints",
-    "HollowArcSpline",
     "DimShape",
     "ArcSplineCompatible",
     "Biarc",
-    "Text",
-    "Ring",
 ]
+
+
+# The composite shapes live in `fibomat.composite_shapes` (they depend on `curve_tools` and `layout`, which depend on this
+# package). For backward compatibility, they are still available as attributes of this package; they are imported
+# lazily on first access.
+_COMPOSITE_SHAPES = ("HollowArcSpline", "Ring", "Text", "DimText")
+
+
+def __getattr__(name: str):
+    if name in _COMPOSITE_SHAPES:
+        import importlib  # pylint: disable=import-outside-toplevel
+
+        return getattr(importlib.import_module("fibomat.composite_shapes"), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

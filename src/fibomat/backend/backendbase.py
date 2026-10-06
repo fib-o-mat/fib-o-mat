@@ -7,7 +7,7 @@ import inspect
 
 from fibomat.site import Site
 from fibomat.pattern import Pattern
-from fibomat import shapes
+from fibomat import shapes, composite_shapes
 from fibomat.utils import PathLike
 from fibomat.backend.backendbasemeta import BackendBaseMeta
 from fibomat.rasterizedpattern import RasterizedPattern
@@ -286,8 +286,8 @@ class BackendBase(metaclass=BackendBaseMeta):
         raise NotImplementedError
 
 
-    @shape_type(shapes.Ring)
-    def ring(self, ptn: Pattern[shapes.Ring]) -> None:
+    @shape_type(composite_shapes.Ring)
+    def ring(self, ptn: Pattern[composite_shapes.Ring]) -> None:
         """
         Adds pattern with `Ring` as shape to the backend.
 
@@ -392,8 +392,8 @@ class BackendBase(metaclass=BackendBaseMeta):
         """
         raise NotImplementedError
 
-    @shape_type(shapes.HollowArcSpline)
-    def hollow_arc_spline(self, ptn: Pattern[shapes.HollowArcSpline]) -> None:
+    @shape_type(composite_shapes.HollowArcSpline)
+    def hollow_arc_spline(self, ptn: Pattern[composite_shapes.HollowArcSpline]) -> None:
         """
         Adds pattern with `HollowArcSpline` as shape to the backend.
 

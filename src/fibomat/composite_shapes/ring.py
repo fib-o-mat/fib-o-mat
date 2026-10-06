@@ -8,7 +8,7 @@ from fibomat.shapes.shape import Shape
 from fibomat.linalg import Vector, VectorLike, BoundingBox
 from fibomat.shapes.arc_spline import ArcSplineCompatible
 from fibomat.shapes.circle import Circle
-from fibomat.shapes.hollow_arc_spline import HollowArcSpline
+from fibomat.composite_shapes.hollow_arc_spline import HollowArcSpline
 
 
 class Ring(Shape, ArcSplineCompatible):

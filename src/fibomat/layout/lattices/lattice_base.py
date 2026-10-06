@@ -3,7 +3,8 @@ import abc
 
 import numpy as np
 
-from fibomat.shapes import HollowArcSpline, ArcSplineCompatible, ArcSpline, Line
+from fibomat.composite_shapes import HollowArcSpline
+from fibomat.shapes import ArcSplineCompatible, ArcSpline, Line
 from fibomat.linalg import TransformableBase, Vector, DimVector
 from fibomat.curve_tools import fill_with_lines
 from fibomat.layout.layoutbase import LayoutBase

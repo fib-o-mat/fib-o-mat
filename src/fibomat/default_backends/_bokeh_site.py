@@ -7,7 +7,7 @@ import numpy as np
 import bokeh.palettes as bp
 
 from fibomat.pattern import Pattern
-from fibomat import shapes
+from fibomat import shapes, composite_shapes
 from fibomat.curve_tools import rasterize
 
 from fibomat.linalg import Vector, DimVector, DimVectorLike
@@ -196,7 +196,7 @@ class BokehSite:
             description=f'Pattern: {ptn.description} | Shape: {ptn.dim_shape.shape.description}',
         )
 
-    def filled_curve_with_holes(self, ptn: Pattern[shapes.HollowArcSpline], hatch_pattern: Optional[str] = None):
+    def filled_curve_with_holes(self, ptn: Pattern[composite_shapes.HollowArcSpline], hatch_pattern: Optional[str] = None):
         boundary_points = self._segmentize_pattern(Pattern(
             dim_shape=ptn.dim_shape.shape.boundary * ptn.dim_shape.unit, mill=None, raster_style=None
         ))

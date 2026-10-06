@@ -1,6 +1,7 @@
 from typing import Iterable, Union, Callable, Optional, Tuple, List
 
-from fibomat.shapes import HollowArcSpline, ArcSplineCompatible, Rect
+from fibomat.composite_shapes import HollowArcSpline
+from fibomat.shapes import ArcSplineCompatible, Rect
 from fibomat.linalg import Transformable, Vector, VectorLike
 from fibomat.layout.lattices.lattice_base import LatticeBaseMixin
 from fibomat.layout.groups.group import Group
