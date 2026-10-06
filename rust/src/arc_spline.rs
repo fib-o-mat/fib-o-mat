@@ -8,7 +8,8 @@ use cavalier_contours::core::math::Vector2;
 use cavalier_contours::polyline::{
     PlineOrientation, PlineSource, PlineSourceMut, PlineVertex, Polyline,
 };
-use numpy::PyReadonlyArray2;
+use numpy::ndarray::Array2;
+use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyType;
 
@@ -99,17 +100,10 @@ impl ArcSpline {
         Ok((min, max))
     }
 
-    /// Mean of all vertices.
+    /// Center of the bounding box.
     pub fn center(&self) -> Result<(f64, f64), String> {
-        if self.is_empty() {
-            return Err("An empty curve has no center.".into());
-        }
-        let n = self.len() as f64;
-        let (sx, sy) = self
-            .pline
-            .iter_vertexes()
-            .fold((0., 0.), |(sx, sy), v| (sx + v.x, sy + v.y));
-        Ok((sx / n, sy / n))
+        let ((x_min, y_min), (x_max, y_max)) = self.bounding_box().map_err(|_| "An empty curve has no center.".to_string())?;
+        Ok(((x_min + x_max) / 2., (y_min + y_max) / 2.))
     }
 
     /// True if the (closed) curve is oriented counter-clockwise.
@@ -207,7 +201,7 @@ impl ArcSpline {
         self.bounding_box().map_err(runtime_error)
     }
 
-    /// Mean of the vertices.
+    /// Center of the bounding box.
     #[getter(center)]
     fn py_center(&self) -> PyResult<(f64, f64)> {
         self.center().map_err(runtime_error)
@@ -254,6 +248,18 @@ impl ArcSpline {
     #[getter(vertices)]
     fn py_vertices(&self) -> Vec<Vertex> {
         self.vertices()
+    }
+
+    /// Vertices as numpy array of shape (n, 3) with the columns x, y, bulge (much faster than `vertices`).
+    #[getter]
+    fn vertices_array<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
+        let mut data = Vec::with_capacity(3 * self.len());
+        for v in self.pline.iter_vertexes() {
+            data.extend_from_slice(&[v.x, v.y, v.bulge]);
+        }
+        Array2::from_shape_vec((self.len(), 3), data)
+            .expect("shape matches the data")
+            .into_pyarray(py)
     }
 
     /// True if the (closed) curve is oriented in mathematically positive direction.
@@ -306,6 +312,17 @@ impl ArcSpline {
         self.closest_point(p_x, p_y).map_err(runtime_error)
     }
 
+    /// Support for `copy.copy`: the curve is copied natively (a `copy.deepcopy` through `__reduce__` is orders of
+    /// magnitude slower).
+    fn __copy__(&self) -> Self {
+        Clone::clone(self)
+    }
+
+    /// Support for `copy.deepcopy`, same as `__copy__` (all data is owned by the curve).
+    fn __deepcopy__(&self, _memo: &Bound<'_, PyAny>) -> Self {
+        Clone::clone(self)
+    }
+
     /// Support for pickle.
     fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyType>, (Vec<Vertex>, bool))> {
         Ok((py.get_type::<ArcSpline>(), (self.vertices(), self.pline.is_closed())))
@@ -347,6 +364,9 @@ mod tests {
         assert_eq!(c.orientation(), Ok(true));
         assert_eq!(c.center(), Ok((1., 1.)));
         assert_eq!(c.bounding_box(), Ok(((0., 0.), (2., 2.))));
+        // the center is the center of the bounding box, not the mean of the vertices
+        let triangle = ArcSpline::from_vertices([(0., 0., 0.), (3., 0., 0.), (3., 3., 0.)], false);
+        assert_eq!(triangle.center(), Ok((1.5, 1.5)));
     }
 
     #[test]

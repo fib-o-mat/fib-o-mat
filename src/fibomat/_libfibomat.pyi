@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import overload, Union, List, Tuple, Iterable, Optional, Callable
+from typing import overload, Union, List, Tuple, Iterable, Optional, Callable, Any
 
 import numpy as np
 
@@ -50,6 +50,9 @@ class ArcSpline:
     def vertices(self) -> List[Tuple[float, float, float]]: ...
 
     @property
+    def vertices_array(self) -> np.ndarray: ...
+
+    @property
     def orientation(self) -> bool: ...
 
     @property
@@ -72,6 +75,8 @@ class ArcSpline:
     ) -> None: ...
 
     def __reduce__(self) -> Tuple: ...
+    def __copy__(self) -> ArcSpline: ...
+    def __deepcopy__(self, memo: Any) -> ArcSpline: ...
 
     # def visit(self, func: Callable[[int, Tuple[float, float, float], Tuple[float, float, float]], bool]): ...
     #
@@ -106,3 +111,4 @@ def offset_with_islands(
 
 
 def convert_arcs_to_lines(curve: ArcSpline, error: float) -> ArcSpline: ...
+

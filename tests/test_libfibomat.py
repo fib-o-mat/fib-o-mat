@@ -69,6 +69,8 @@ class TestArcSplineProperties:
         assert c.area == pytest.approx(4)
         assert c.orientation
         assert c.center == pytest.approx((1, 1))
+        # center of the bounding box, not the mean of the vertices
+        assert ArcSpline([(0, 0, 0), (3, 0, 0), (3, 3, 0)], False).center == pytest.approx((1.5, 1.5))
         assert c.bounding_box == ((0, 0), (2, 2))
         assert c.start == (0, 0, 0)
         assert c.end == (0, 2, 0)
@@ -284,3 +286,100 @@ class TestConvertArcsToLines:
     def test_lines_are_unchanged(self):
         res = lib.convert_arcs_to_lines(square(), 0.01)
         assert res.vertices == square().vertices
+
+
+class TestCopy:
+    def test_copy_and_deepcopy(self):
+        import copy
+
+        c = circle()
+        for copied in (copy.copy(c), copy.deepcopy(c), copy.deepcopy({'curve': c})['curve']):
+            assert isinstance(copied, ArcSpline)
+            assert copied.vertices == c.vertices
+            assert copied.is_closed
+
+    def test_copies_are_independent(self):
+        import copy
+
+        c = square()
+        for copied in (copy.copy(c), copy.deepcopy(c), c.clone()):
+            copied.impl_translate((1, 1))
+            assert copied.start == (1, 1, 0)
+            assert c.start == (0, 0, 0)
+
+    def test_deepcopy_keeps_shared_references_of_containers(self):
+        import copy
+
+        c = square()
+        res = copy.deepcopy([c, c])
+        assert res[0] is res[1]
+        assert res[0] is not c
+
+    def test_deepcopy_does_not_use_reduce(self):
+        # __reduce__ builds python lists of all vertices and is very slow for big curves
+        import copy
+        import time
+
+        n = 200_000
+        arr = np.c_[np.cos(np.linspace(0, 6.28, n)), np.sin(np.linspace(0, 6.28, n)), np.zeros(n)]
+        big = ArcSpline(arr, True)
+        start = time.perf_counter()
+        copy.deepcopy(big)
+        copy_time = time.perf_counter() - start
+        start = time.perf_counter()
+        pickle.dumps(big)
+        pickle_time = time.perf_counter() - start
+        assert copy_time < pickle_time / 5
+
+
+class TestVerticesArray:
+    def test_values_and_type(self):
+        c = ArcSpline([(0, 0, 0.5), (1, 0, 0), (1, 1, -1)], False)
+        arr = c.vertices_array
+        assert isinstance(arr, np.ndarray)
+        assert arr.shape == (3, 3)
+        assert arr.dtype == np.float64
+        assert arr.tolist() == [list(v) for v in c.vertices]
+
+    def test_empty_curve(self):
+        assert ArcSpline(np.zeros((0, 3)), False).vertices_array.shape == (0, 3)
+
+    def test_array_is_a_copy(self):
+        c = square()
+        arr = c.vertices_array
+        arr[0, 0] = 100.
+        assert c.start == (0, 0, 0)
+
+
+class TestBoundingBoxWithArcs:
+    # arcs sweep at most a half circle (|bulge| <= 1), as supported by cavalier_contours
+    @pytest.mark.parametrize('seed', range(20))
+    def test_matches_sampled_curve(self, seed):
+        rng = np.random.default_rng(seed)
+        n = rng.integers(2, 8)
+        vertices = np.c_[rng.uniform(-5, 5, n), rng.uniform(-5, 5, n), rng.uniform(-1, 1, n)]
+        c = ArcSpline(vertices, bool(seed % 2))
+
+        # sample all segments
+        samples = []
+        n_segments = n if c.is_closed else n - 1
+        for i in range(n_segments):
+            p0, p1, bulge = vertices[i, :2], vertices[(i + 1) % n, :2], vertices[i, 2]
+            t = np.linspace(0, 1, 2001)[:, None]
+            if abs(bulge) < 1e-12:
+                samples.append(p0 + t * (p1 - p0))
+                continue
+            chord = p1 - p0
+            length = np.linalg.norm(chord)
+            theta = 4 * np.arctan(bulge)
+            radius = length / (2 * np.sin(abs(theta) / 2))
+            mid = (p0 + p1) / 2
+            normal = np.array([-chord[1], chord[0]]) / length
+            center = mid + normal * radius * np.cos(theta / 2) * np.sign(bulge)
+            angle0 = np.arctan2(*(p0 - center)[::-1])
+            angles = angle0 + t[:, 0] * theta
+            samples.append(center + radius * np.c_[np.cos(angles), np.sin(angles)])
+        pts = np.concatenate(samples)
+        (x0, y0), (x1, y1) = c.bounding_box
+        assert (x0, y0, x1, y1) == pytest.approx((pts[:, 0].min(), pts[:, 1].min(), pts[:, 0].max(), pts[:, 1].max()), abs=2e-3)
+
