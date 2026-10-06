@@ -1,194 +1,310 @@
-from typing import Optional
+"""Provides the :class:`Text` and :class:`DimText` classes.
+
+Text is shaped with the Hershey fonts of `pyhershey`. Every character is a :class:`~fibomat.composite_shapes.glyph.Glyph`
+which consists of the polylines of the character or, if a stroke width is given, of the outlines of the strokes
+(polygons, characters with enclosed areas like 'O' or 'B' have polygons with holes).
+
+Example::
+
+    from fibomat.composite_shapes import Text
+    from fibomat.units import unit
+
+    text = Text('Hello fib-o-mat!\\nsecond line', font_size=2, stroke_width=0.2, text_alignment='center')
+
+    for glyph in text:  # one glyph per character (including spaces)
+        if glyph:  # glyphs of spaces are empty
+            for shape in glyph:
+                ...
+
+    text.shapes()  # all shapes of all glyphs
+    text.baseline_anchor('left', i_line=1)
+
+    dim_text = text * unit('µm')  # DimText
+"""
+from __future__ import annotations
+
+import typing as t
 
 import numpy as np
-
+from pyhershey.glyph_factory import glyph_factory
 import pyhershey
 
-from fibomat.shapes.polyline import Polyline
+from fibomat.composite_shapes._dim_composite import DimComposite
+from fibomat.composite_shapes.glyph import DimGlyph, Glyph
+from fibomat.composite_shapes.hollow_arc_spline import HollowArcSpline
+from fibomat.linalg import BoundingBox, DimVector, Transformable, Vector
+from fibomat.shapes.dim_shape import DimShape, LengthUnitLike
 from fibomat.shapes.polygon import Polygon
-from fibomat.layout import Group, DimGroup
-from fibomat.linalg import Vector, translate
-from fibomat.linalg.helpers import make_perp_vector, GeomLine
-from fibomat.units import U_
-# from fibomat.curve_tools import
+from fibomat.shapes.polyline import Polyline
+from fibomat.shapes.shape import Shape
+from fibomat import _libfibomat
 
 
-class Text(Group):
-    """"""
+__all__ = ['Text', 'DimText']
 
-    @staticmethod
-    def _add_stroke(polyline: Polyline, stroke_width: float) -> Polygon:
-        def make_normals(p1: Vector, p2: Vector):
-            normal = make_perp_vector(p2 - p1).normalized_to(stroke_width)
-            return normal, -1 * normal
 
-        def make_offset_segments(p1: Vector, p2: Vector):
-            normals = make_normals(p1, p2)
+_ALIGNMENTS = ('left', 'center', 'right')
+_ANCHORS = ('left', 'center', 'right')
+_JOINS = ('bevel', 'miter', 'round')
+_CAPS = ('butt', 'square', 'round')
+_HERSHEY_FONT_SIZE = 21
+"""The height of upper case letters of the Hershey fonts (before scaling)."""
+_LINE_SPACING = 1.6
+"""Distance of the baselines in units of the font size."""
 
-            length = np.linalg.norm(p1 - p2)
 
-            return (
-                GeomLine(
-                    Vector((p2 + normals[0]) - (p1 + normals[0])).normalized_to(length),
-                    (p1 + normals[0]),
-                ),
-                GeomLine(
-                    Vector((p2 + normals[1]) - (p1 + normals[1])).normalized_to(length),
-                    (p1 + normals[1]),
-                ),
-            )
+def _merge_segments(segments: t.Sequence[np.ndarray]) -> t.List[np.ndarray]:
+    """Chain segments which share an end point (if exactly two segments end in the point).
 
-        def make_points(segments_, prev_segments_):
-            if segments_[0].parallel_to(prev_segments_[0]):
-                return [segments_[0](0)], [segments_[1](0)]
-            else:
-                param = segments_[0].intersect_at_param(prev_segments_[0])
+    The Hershey fonts store e.g. a 'V' as two separate strokes. Stroked separately they have butt caps and leave a gap on
+    the outer side of their common end point; as one polyline they are connected by a proper join.
+    """
+    segments = [np.asarray(segment, dtype=float) for segment in segments]
+    tol = 1e-9 * max((float(np.max(np.abs(segment))) for segment in segments), default=1.)
 
-                if 0 < param < 1:
-                    return [segments_[0](param)], [
-                        prev_segments_[1](1),
-                        segments_[1](0),
-                    ]
-                else:
-                    param = segments_[1].intersect_at_param(prev_segments_[1])
+    while True:
+        ends: t.List[t.Tuple[int, int]] = []  # (segment index, 0 for the start and -1 for the end)
+        for i_segment, segment in enumerate(segments):
+            if not np.allclose(segment[0], segment[-1], rtol=0., atol=tol):  # (closed segments are not chained)
+                ends.extend([(i_segment, 0), (i_segment, -1)])
 
-                    return [prev_segments_[0](1), segments_[0](0)], [
-                        segments_[1](param)
-                    ]
+        merged = False
+        for i, (i_first, side_first) in enumerate(ends):
+            partners = [
+                (i_second, side_second) for (i_second, side_second) in ends
+                if i_second != i_first and np.allclose(
+                    segments[i_second][side_second], segments[i_first][side_first], rtol=0., atol=tol
+                )
+            ]
+            # no junction of three or more segments, and no further segment ending in this point twice
+            same_segment = [e for e in ends[i + 1:] if e[0] == i_first and np.allclose(
+                segments[e[0]][e[1]], segments[i_first][side_first], rtol=0., atol=tol)]
+            if len(partners) == 1 and not same_segment:
+                i_second, side_second = partners[0]
+                first = segments[i_first] if side_first == -1 else segments[i_first][::-1]
+                second = segments[i_second] if side_second == 0 else segments[i_second][::-1]
+                chain = np.concatenate((first, second[1:]))
+                segments = [segment for k, segment in enumerate(segments) if k not in (i_first, i_second)] + [chain]
+                merged = True
+                break
 
-        polyline_points = polyline.points
+        if not merged:
+            return segments
 
-        if len(polyline_points) < 2:
-            raise RuntimeError
 
-        closed = np.allclose(polyline_points[0], polyline_points[-1])
+def _stroked_shapes(segments: t.Sequence[np.ndarray], width: float, join: str, cap: str) -> t.List[Shape]:
+    """Outlines of the united strokes of the segments of a glyph: polygons, or polygons with holes."""
+    paths, closed = [], []
+    for segment in _merge_segments(segments):
+        is_closed = len(segment) > 2 and bool(np.allclose(segment[0], segment[-1]))
+        # (the first point must not be repeated for closed paths)
+        paths.append(np.ascontiguousarray(segment[:-1] if is_closed else segment, dtype=float))
+        closed.append(is_closed)
 
-        points_first_side = []
-        points_second_side = []
-
-        first_segments = make_offset_segments(polyline_points[0], polyline_points[1])
-
-        if not closed:
-            points_first_side.append(first_segments[0](0))
-            points_second_side.append(first_segments[1](0))
-
-        prev_segments = first_segments
-
-        for i in range(1, len(polyline_points) - 1):
-            segments = make_offset_segments(polyline_points[i], polyline_points[i + 1])
-
-            first, second = make_points(segments, prev_segments)
-
-            points_first_side.extend(first)
-            points_second_side.extend(second)
-
-            prev_segments = segments
-
-        if closed:
-            first, second = make_points(first_segments, prev_segments)
-            points_first_side.extend(first)
-            points_second_side.extend(second)
-
-            points_first_side.insert(0, first[-1])
-            points_second_side.insert(0, second[-1])
+    shapes: t.List[Shape] = []
+    for contours in _libfibomat.stroke_paths(paths, closed, width, join, cap):
+        outer, holes = contours[0], contours[1:]
+        if holes:
+            shapes.append(HollowArcSpline.from_points(outer, holes, disable_checks=True))
         else:
-            points_first_side.append(prev_segments[0](1))
-            points_second_side.append(prev_segments[1](1))
+            shapes.append(Polygon(outer))
+    return shapes
 
-        return Polygon(points_first_side + list(reversed(points_second_side)))
 
-    def __init__(
+class Text(Transformable[Vector, BoundingBox]):
+    """Text, shaped with a Hershey font.
+
+    The text is a sequence of glyphs (one for each character). The shapes of all glyphs are accessible with
+    :meth:`Text.shapes`. Text is transformable.
+    """
+
+    def __init__(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         text: str,
-        font_size: float = 1,
-        stroke_width: Optional[float] = None,
-        text_alignment: Optional[str] = None,
-        description: Optional[str] = None,
-        mapping: Optional[str] = None,
+        font_size: float = 1.,
+        stroke_width: t.Optional[float] = None,
+        text_alignment: t.Optional[str] = None,
+        description: t.Optional[str] = None,
+        mapping: t.Optional[str] = None,
+        stroke_join: str = 'bevel',
+        stroke_cap: str = 'butt',
     ):
         """
+        The first baseline starts at (0, 0) (for the alignments "left", "center" and "right" its left, center and
+        right side, respectively, is at x = 0). Further lines are placed below.
+
         Args:
-            text (str): text
+            text (str): text. Lines are separated by ``\\n``. Only printable ASCII characters can be used (cf.
+                `mapping`).
             font_size (float, optional):
                 font size (directly correspond to the height of upper case letters). Default to 1.
             stroke_width (float, optional):
-                the stroke width of the glyph segments. If None, the glyph segments are given by 1d polylines.
-                Default to None.
+                the (total) width of the strokes of the glyphs. If None, the glyphs consist of 1d polylines. Otherwise,
+                the outlines of the strokes are used. Default to None.
             text_alignment (str, optional): the text alignment. Can be "left", "center", "right". Default to "left".
+            description (str, optional): description
+            mapping (str, optional): the ascii to hershey mapping (font). Default to "roman_simplex".
+            stroke_join (str, optional): "bevel", "miter" or "round". Only used if `stroke_width` is given.
+            stroke_cap (str, optional): "butt", "square" or "round". Only used if `stroke_width` is given.
+
+        Raises:
+            ValueError: Raised if arguments are invalid, the text contains characters which are not available in the
+                font or contains no glyph with shapes (e.g. only spaces).
         """
+        super().__init__(description)
 
-        mapping = mapping or "roman_simplex"
+        mapping = mapping or 'roman_simplex'
+        text_alignment = text_alignment or 'left'
 
-        font_size /= 21
-        advance_height = 1.6 * 21 * font_size
+        font_size = float(font_size)
+        if not np.isfinite(font_size) or font_size <= 0.:
+            raise ValueError('font_size must be positive and finite.')
+        if stroke_width is not None:
+            stroke_width = float(stroke_width)
+            if not np.isfinite(stroke_width) or stroke_width <= 0.:
+                raise ValueError('stroke_width must be positive and finite.')
+        if stroke_join not in _JOINS:
+            raise ValueError(f'stroke_join must be one of {_JOINS}, got {stroke_join!r}.')
+        if stroke_cap not in _CAPS:
+            raise ValueError(f'stroke_cap must be one of {_CAPS}, got {stroke_cap!r}.')
+        if text_alignment not in _ALIGNMENTS:
+            raise ValueError(f'text_alignment must be one of {_ALIGNMENTS}, got {text_alignment!r}.')
+        if mapping not in glyph_factory.ascii_mappings:
+            raise ValueError(f'Unknown mapping {mapping!r}, available mappings: {glyph_factory.ascii_mappings}.')
+        text = str(text)
+        unsupported = []
+        for character in sorted(set(text) - {'\n'}):
+            try:
+                glyph_factory.from_ascii(character, mapping)
+            except Exception:  # pylint: disable=broad-except
+                unsupported.append(character)
+        if unsupported:
+            raise ValueError(f'The characters {unsupported} are not available in the font {mapping!r}.')
 
-        if not text_alignment:
-            text_alignment = "left"
+        self._text = text
+        self._font_size = font_size
+        self._stroke_width = stroke_width
 
-        shaped_text_lines = [
-            pyhershey.shape_text(
-                text_line,
-                advance_height=0,
-                mapping=mapping,
-                font_size=font_size,
-                text_align=text_alignment,
+        scale = font_size / _HERSHEY_FONT_SIZE
+        line_height = _LINE_SPACING * font_size
+
+        glyphs: t.List[Glyph] = []
+        anchors: t.List[t.Dict[str, Vector]] = []
+
+        for i_line, line in enumerate(text.split('\n')):
+            y_pos = -i_line * line_height
+            shaped_line = (
+                pyhershey.shape_text(line, advance_height=0, mapping=mapping, font_size=scale, text_align='left')
+                if line else []
             )
-            for text_line in text.split("\n")
+
+            width = shaped_line[-1]['pos'][0] + shaped_line[-1]['glyph'].advance_width if shaped_line else 0.
+            shift = {'left': 0., 'center': -width / 2, 'right': -width}[text_alignment]
+
+            for character, shaped_glyph in zip(line, shaped_line):
+                position = np.array([shaped_glyph['pos'][0] + shift, y_pos])
+                segments = [np.asarray(segment, dtype=float) + position for segment in shaped_glyph['glyph'].segments]
+                segments = [segment for segment in segments if len(segment) >= 2]
+
+                if stroke_width and segments:
+                    shapes = _stroked_shapes(segments, stroke_width, stroke_join, stroke_cap)
+                else:
+                    shapes = [Polyline(segment) for segment in segments]
+
+                glyphs.append(Glyph(shapes, character, position, shaped_glyph['glyph'].advance_width))
+
+            anchors.append({
+                'left': Vector(shift, y_pos),
+                'center': Vector(shift + width / 2, y_pos),
+                'right': Vector(shift + width, y_pos),
+            })
+
+        if not any(glyphs):
+            raise ValueError('The text contains no printable characters (only spaces and line breaks).')
+
+        self._glyphs = tuple(glyphs)
+        self._anchors = anchors
+        self._line_of_glyph = [
+            i_line for i_line, line in enumerate(text.split('\n')) for _ in line
         ]
 
-        glyph_groups = []
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}({self._text!r}, font_size={self._font_size!r})'
 
-        y_shift = 0
-        anchors = []
+    @property
+    def text(self) -> str:
+        """The text.
 
-        for shaped_text_line in shaped_text_lines:
-            for shaped_glyph in shaped_text_line:
-                glyph_polylines = []
+        Access:
+            get
+        """
+        return self._text
 
-                for segment in shaped_glyph["glyph"].segments:
-                    # if np.allclose(segment[0], segment[-1]):
-                    #     seg_shape = Polygon(segment)
-                    # else:
-                    #     seg_shape = Polyline(segment)
+    @property
+    def font_size(self) -> float:
+        """The font size (the height of upper case letters).
 
-                    if stroke_width:
-                        glyph_polylines.append(
-                            self._add_stroke(Polyline(segment), stroke_width)
-                        )
-                    else:
-                        glyph_polylines.append(Polyline(segment))
+        Access:
+            get
+        """
+        return self._font_size
 
-                if glyph_polylines:
-                    glyph_groups.append(
-                        Group(glyph_polylines).transformed(
-                            translate(shaped_glyph["pos"]) | translate((0, y_shift))
-                        )
-                    )
+    @property
+    def stroke_width(self) -> t.Optional[float]:
+        """The stroke width (None if the glyphs consist of polylines).
 
-            anchor_left = Vector(shaped_text_line[0]["pos"]) + (0, y_shift)
-            anchor_right = Vector(shaped_text_line[-1]["pos"]) + (
-                shaped_text_line[-1]["glyph"].advance_width,
-                y_shift,
-            )
-            anchor_center = Vector((anchor_left.x + anchor_right.x) / 2, y_shift)
+        Access:
+            get
+        """
+        return self._stroke_width
 
-            y_shift -= advance_height
+    @property
+    def glyphs(self) -> t.Tuple[Glyph, ...]:
+        """The glyphs, one for each character (also for spaces, these glyphs are empty).
 
-            anchors.append(
-                {"left": anchor_left, "center": anchor_center, "right": anchor_right}
-            )
+        Access:
+            get
+        """
+        return self._glyphs
 
-        self._n_lines = len(shaped_text_lines)
-        self._anchors = anchors
+    def __iter__(self) -> t.Iterator[Glyph]:
+        return iter(self._glyphs)
 
-        # glyph_group = Group(glyph_groups)
+    def __len__(self) -> int:
+        return len(self._glyphs)
 
-        super().__init__(glyph_groups, description)
+    def line(self, i_line: int) -> t.Tuple[Glyph, ...]:
+        """The glyphs of a text line.
+
+        Args:
+            i_line (int): index of the line (can be negative)
+
+        Returns:
+            Tuple[Glyph, ...]
+
+        Raises:
+            IndexError: Raised if there is no such line.
+        """
+        index = range(self.n_lines)[i_line]
+        return tuple(glyph for glyph, i in zip(self._glyphs, self._line_of_glyph) if i == index)
+
+    def shapes(self) -> t.Iterator[Shape]:
+        """Iterate over the shapes of all glyphs.
+
+        Yields:
+            Shape
+        """
+        for glyph in self._glyphs:
+            yield from glyph
 
     @property
     def n_lines(self) -> int:
-        """int: number of text lines"""
-        return self._n_lines
+        """Number of text lines.
+
+        Access:
+            get
+        """
+        return len(self._anchors)
 
     def baseline_anchor(self, pos: str, i_line: int = 0) -> Vector:
         """Return position of certain base line points.
@@ -200,84 +316,171 @@ class Text(Group):
                 etc.). Default to 0.
 
         Returns:
+            Vector
 
+        Raises:
+            ValueError: Raised if `pos` is unknown.
+            IndexError: Raised if there is no such line.
         """
+        if pos not in _ANCHORS:
+            raise ValueError(f'pos must be one of {_ANCHORS}, got {pos!r}.')
         return self._anchors[i_line][pos]
 
-    def __mul__(self, other):
-        if isinstance(other, U_):
-            # from fibomat.layout.groups.dim_group import DimGroup
-            return DimText(
-                self.elements, self._anchors, other, description=self.description
-            )
-        raise NotImplementedError
+    @property
+    def bounding_box(self) -> BoundingBox:
+        """Bounding box of all glyphs.
+
+        Access:
+            get
+        """
+        glyphs = [glyph for glyph in self._glyphs if glyph]
+        bbox = glyphs[0].bounding_box
+        for glyph in glyphs[1:]:
+            bbox = bbox.extended(glyph.bounding_box)
+        return bbox
+
+    @property
+    def center(self) -> Vector:
+        """Center of the bounding box of the text.
+
+        Access:
+            get
+        """
+        return self.bounding_box.center
+
+    def _transform_anchors(self, func: t.Callable[[Vector], Vector]) -> None:
+        self._anchors = [{name: func(anchor) for name, anchor in anchors.items()} for anchors in self._anchors]
+
+    def _impl_translate(self, trans_vec: Vector) -> None:
+        trans_vec = Vector(trans_vec)
+        for glyph in self._glyphs:
+            glyph._impl_translate(trans_vec)  # pylint: disable=protected-access
+        self._transform_anchors(lambda anchor: anchor + trans_vec)
+
+    def _impl_rotate(self, theta: float) -> None:
+        for glyph in self._glyphs:
+            glyph._impl_rotate(theta)  # pylint: disable=protected-access
+        self._transform_anchors(lambda anchor: anchor.rotated(theta))
+
+    def _impl_scale(self, fac: float) -> None:
+        fac = float(fac)
+        for glyph in self._glyphs:
+            glyph._impl_scale(fac)  # pylint: disable=protected-access
+        self._transform_anchors(lambda anchor: anchor * fac)
+        self._font_size *= abs(fac)
+        if self._stroke_width:
+            self._stroke_width *= abs(fac)
+
+    def _impl_mirror(self, mirror_axis: Vector) -> None:
+        mirror_axis = Vector(mirror_axis)
+        for glyph in self._glyphs:
+            glyph._impl_mirror(mirror_axis)  # pylint: disable=protected-access
+        self._transform_anchors(lambda anchor: anchor.mirrored(mirror_axis))
+
+    def __mul__(self, other: t.Any) -> t.Any:
+        """``text * unit('µm')`` creates a :class:`DimText`.
+
+        Raises:
+            DimensionError: Raised if `other` is not a unit of length.
+        """
+        from fibomat.units.unit_tag import _UnitTag  # pylint: disable=import-outside-toplevel,protected-access
+
+        if not isinstance(other, _UnitTag):
+            return NotImplemented
+        return DimText(self, other)
+
+    def __rmul__(self, other: t.Any) -> t.Any:
+        return self.__mul__(other)
 
 
-class DimText(DimGroup):
-    def __init__(self, elements, anchors, unit, description):
-        super().__init__([elem * unit for elem in elements], description)
+class DimText(DimComposite):
+    """A :class:`Text` with a unit of length."""
 
-        self._anchors = anchors
-        self._unit = unit
+    def __init__(self, text: Text, unit: LengthUnitLike, description: t.Optional[str] = None):
+        """
+        Args:
+            text (Text): text, its coordinates are given in `unit`
+            unit (str, pint.Unit, unit): unit of length
+            description (str, optional): description
+
+        Raises:
+            TypeError: Raised if `text` is no :class:`Text` or `unit` is no unit.
+            DimensionError: Raised if `unit` is no unit of length.
+        """
+        if not isinstance(text, Text):
+            raise TypeError(f'text must be a Text, got {type(text).__name__}.')
+        super().__init__(text, unit, description if description is not None else text.description)
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}({self._obj.text!r}, unit={self._unit!r})'
+
+    @property
+    def text_obj(self) -> Text:
+        """The (unitless) text.
+
+        Access:
+            get
+        """
+        return self._obj
+
+    @property
+    def text(self) -> str:
+        """The text.
+
+        Access:
+            get
+        """
+        return self._obj.text
+
+    @property
+    def glyphs(self) -> t.Tuple[DimGlyph, ...]:
+        """The glyphs with the unit of the text.
+
+        Access:
+            get
+        """
+        return tuple(DimGlyph(glyph, self._unit) for glyph in self._obj.glyphs)
+
+    def __iter__(self) -> t.Iterator[DimGlyph]:
+        return iter(self.glyphs)
+
+    def __len__(self) -> int:
+        return len(self._obj)
+
+    def shapes(self) -> t.Iterator[DimShape]:
+        """Iterate over the shapes of all glyphs.
+
+        Yields:
+            DimShape
+        """
+        for shape in self._obj.shapes():
+            yield DimShape(shape, self._unit)
+
+    def layout_elements(self) -> t.Iterator[DimShape]:
+        """The shapes of all glyphs (so that backends can export a text like a group of shapes).
+
+        Yields:
+            DimShape
+        """
+        yield from self.shapes()
 
     @property
     def n_lines(self) -> int:
-        return len(self._anchors)
+        """Number of text lines.
 
-    def baseline_anchor(self, pos: str, i_line: int = 0) -> Vector:
-        return self._anchors[i_line][pos] * self._unit
+        Access:
+            get
+        """
+        return self._obj.n_lines
 
+    def baseline_anchor(self, pos: str, i_line: int = 0) -> DimVector:
+        """Return position of certain base line points.
 
-# def shape_text(
-#
-# ) -> Group:
-#     """Shape a given text.
-#     This create a group containing glyphs where each glyph is given as a subgroup.
-#     ``text`` can be any string but may only contain printable ASCII characters and "°". New lines can be introduced
-#     with "\\n".
-#
-#     The pivot of the returned group is set to start of the baseline of the first text row. If ``text_align`` is "center"
-#     or "right", the pivot is at the center or right side of the baseline, respectively.
-#
-#     Args:
-#         text (str): text
-#         font_size (float, optional):
-#             font size (directly correspond to the height of upper case letters). Default to 1.
-#         stroke_width (float, optional):
-#             the stroke width of the glyph segments. If None, the glyph segments are given by 1d polylines.
-#             Default to None.
-#         text_alignment (str, optional): the text alignment. Can be "left", "center", "right". Default to "left".
-#
-#     Returns:
-#         Group: grouped shaped text as
-#     """
-#
-#     font_size /= 21
-#     advance_height = 1.5 * 21 * font_size
-#
-#     if not text_alignment:
-#         text_alignment = 'left'
-#
-#     shaped_glyphs = pyhershey.shape_text(
-#         text, advance_height=advance_height, mapping='roman_simplex', font_size=font_size, text_align=text_alignment
-#     )
-#
-#     glyph_groups = []
-#
-#     for shaped_glyph in shaped_glyphs:
-#         glyph_polylines = []
-#
-#         for segment in shaped_glyph['glyph'].segments:
-#             if stroke_width:
-#                 glyph_polylines.append(_add_stroke(Polyline(segment), stroke_width))
-#             else:
-#                 glyph_polylines.append(Polyline(segment))
-#
-#         if glyph_polylines:
-#             glyph_groups.append(Group(glyph_polylines).translated(shaped_glyph['pos']))
-#
-#     glyph_group = Group(glyph_groups)
-#
-#     glyph_group.pivot =
-#
-#     return glyph_group.translated_to((0, 0))
+        Args:
+            pos (str): position on the base line. Can be "left", "center" or "right".
+            i_line (int, optional): index of the base line to be used. Default to 0.
+
+        Returns:
+            DimVector
+        """
+        return DimVector.from_vector(self._obj.baseline_anchor(pos, i_line), self._unit)

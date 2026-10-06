@@ -2,6 +2,7 @@
 
 mod arc_spline;
 mod error;
+mod stroke;
 mod tools;
 
 pub use arc_spline::ArcSpline;
@@ -18,5 +19,6 @@ fn _libfibomat(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tools::offset_curve, m)?)?;
     m.add_function(wrap_pyfunction!(tools::offset_with_islands, m)?)?;
     m.add_function(wrap_pyfunction!(tools::convert_arcs_to_lines, m)?)?;
+    m.add_function(wrap_pyfunction!(stroke::stroke_paths, m)?)?;
     Ok(())
 }

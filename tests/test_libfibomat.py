@@ -383,3 +383,74 @@ class TestBoundingBoxWithArcs:
         (x0, y0), (x1, y1) = c.bounding_box
         assert (x0, y0, x1, y1) == pytest.approx((pts[:, 0].min(), pts[:, 1].min(), pts[:, 0].max(), pts[:, 1].max()), abs=2e-3)
 
+
+class TestStrokePaths:
+    @staticmethod
+    def signed_area(contour):
+        x, y = contour.T
+        return 0.5 * (x @ np.roll(y, -1) - y @ np.roll(x, -1))
+
+    def test_line(self):
+        polygons = lib.stroke_paths([np.array([[0., 0.], [10., 0.]])], [False], 2.)
+        assert len(polygons) == 1 and len(polygons[0]) == 1
+        assert polygons[0][0].shape == (4, 2) and polygons[0][0].dtype == np.float64
+        assert self.signed_area(polygons[0][0]) == pytest.approx(20.)
+
+    def test_joins(self):
+        path = [np.array([[-10., 0.], [0., 0.], [0., 10.]])]
+        areas = {}
+        for join in ('bevel', 'miter', 'round'):
+            (polygon,) = lib.stroke_paths(path, [False], 2., join)
+            areas[join] = self.signed_area(polygon[0])
+        # two 10 x 2 strokes which overlap in a 1 x 1 square (39) plus the corner on the outer side
+        # (bevel: triangle, miter: complete 1 x 1 square, round: quarter disk)
+        assert areas['bevel'] == pytest.approx(39.5, abs=1e-6)
+        assert areas['miter'] == pytest.approx(40., abs=1e-6)
+        assert areas['round'] == pytest.approx(39. + math.pi / 4, abs=0.02)
+
+    def test_caps(self):
+        path = [np.array([[0., 0.], [10., 0.]])]
+        areas = {cap: self.signed_area(lib.stroke_paths(path, [False], 2., 'bevel', cap)[0][0])
+                 for cap in ('butt', 'square', 'round')}
+        assert areas['butt'] == pytest.approx(20.)
+        assert areas['square'] == pytest.approx(24.)
+        assert areas['round'] == pytest.approx(20. + math.pi, abs=0.05)
+
+    def test_closed_path_has_a_hole(self):
+        square = np.array([[0., 0.], [10., 0.], [10., 10.], [0., 10.]])
+        (polygon,) = lib.stroke_paths([square], [True], 2., 'miter')
+        assert len(polygon) == 2
+        assert self.signed_area(polygon[0]) == pytest.approx(144.)  # (counterclockwise outer contour)
+        assert self.signed_area(polygon[1]) == pytest.approx(-64.)  # (clockwise hole)
+
+    def test_crossing_paths_are_united(self):
+        paths = [np.array([[-5., 0.], [5., 0.]]), np.array([[0., -5.], [0., 5.]])]
+        polygons = lib.stroke_paths(paths, [False, False], 2.)
+        assert len(polygons) == 1 and len(polygons[0]) == 1
+        assert self.signed_area(polygons[0][0]) == pytest.approx(36.)
+
+    def test_disjoint_paths(self):
+        paths = [np.array([[0., 0.], [1., 0.]]), np.array([[0., 5.], [1., 5.]])]
+        assert len(lib.stroke_paths(paths, [False, False], 0.5)) == 2
+
+    def test_tight_curve_gives_a_simple_polygon(self):
+        hook = np.array([[1., 1.], [1., 0.25], [0.8, 0.05], [0.5, 0.], [0.2, 0.05], [0.05, 0.25]])
+        (polygon,) = lib.stroke_paths([hook], [False], 0.5)
+        assert len(polygon) == 1
+        assert lib.self_intersections(ArcSpline(np.c_[polygon[0], np.zeros(len(polygon[0]))], True)) == []
+
+    def test_no_paths_and_invalid_arguments(self):
+        assert lib.stroke_paths([], [], 1.) == []
+        path = np.array([[0., 0.], [1., 0.]])
+        for kwargs in ({'width': 0.}, {'width': -1.}, {'width': np.nan}, {'join': 'foo'}, {'cap': 'foo'}):
+            args = {'width': 1., **kwargs}
+            with pytest.raises(RuntimeError):
+                lib.stroke_paths([path], [False], **args)
+        with pytest.raises(RuntimeError):
+            lib.stroke_paths([path], [], 1.)
+        with pytest.raises(RuntimeError):
+            lib.stroke_paths([np.array([[0., 0.]])], [False], 1.)
+        with pytest.raises(RuntimeError):
+            lib.stroke_paths([np.zeros((3, 3))], [False], 1.)
+        with pytest.raises(RuntimeError):
+            lib.stroke_paths([np.array([[0., 0.], [np.nan, 1.]])], [False], 1.)

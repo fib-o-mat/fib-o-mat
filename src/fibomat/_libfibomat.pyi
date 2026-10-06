@@ -112,3 +112,11 @@ def offset_with_islands(
 
 def convert_arcs_to_lines(curve: ArcSpline, error: float) -> ArcSpline: ...
 
+
+def stroke_paths(
+    paths: List[np.ndarray],
+    closed: List[bool],
+    width: float,
+    join: str = "bevel",
+    cap: str = "butt",
+) -> List[List[np.ndarray]]: ...

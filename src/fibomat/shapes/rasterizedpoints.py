@@ -1,63 +1,93 @@
-"""Provides the :class:`RasterizedPoints` class."""
+"""Provides the :class:`RasterizedPoints` class.
+
+Example::
+
+    import numpy as np
+    from fibomat.shapes import RasterizedPoints
+
+    # x, y and a dwell time multiplicand of each point
+    points = RasterizedPoints(np.array([[0., 0., 1.], [1., 0., 1.], [2., 0., 0.5]]), is_closed=False)
+
+    points.positions, points.weights, points.n_points
+    points.translated((1, 1)).bounding_box
+    points.repeats_applied(3)  # every point three times
+    RasterizedPoints.merged([points, points.translated((0, 1))])
+"""
 from __future__ import annotations
-from typing import List, Optional
+
+import typing as t
 
 import numpy as np
 
-from fibomat.linalg import Vector, VectorLike, BoundingBox
-from fibomat.shapes import Shape
+from fibomat.linalg import BoundingBox, Vector
+from fibomat.shapes.shape import Shape
+
+
+__all__ = ['RasterizedPoints']
 
 
 class RasterizedPoints(Shape):
-    """Class represents pre-rasterized points."""
-    def __init__(self, dwell_points: np.ndarray, is_closed: bool, description: Optional[str] = None):
+    """Class represents pre-rasterized points (a position and a dwell time multiplicand for every point)."""
+
+    def __init__(self, dwell_points: np.ndarray, is_closed: bool, description: t.Optional[str] = None):
         """
         Args:
             dwell_points (np.ndarray):
                 dim must be 2 with shape = (-1, 3). First to components are coordinates and  third a dwell time
-                multiplicand.
+                multiplicand. The array is copied.
             is_closed (bool): if True, shape is considered as closed.
             description (str, optional): description
 
         Raises:
-            ValueError: Raised if dimension or shape of dwell points is wrong
+            ValueError: Raised if dimension or shape of dwell points is wrong or the values are not finite
         """
         super().__init__(description)
 
-        if dwell_points.ndim != 2:
-            raise ValueError('dwell_points mus have dimension 2.')
-        if dwell_points.shape[1] != 3:
-            raise ValueError('dwell_points must have shape (N, 3)')
+        try:
+            array = np.array(dwell_points, dtype=float)
+        except (TypeError, ValueError) as error:
+            raise ValueError('dwell_points must be an array of floats.') from error
 
-        self._dwell_points = dwell_points
+        if array.ndim != 2:
+            raise ValueError('dwell_points must have dimension 2.')
+        if array.shape[1] != 3:
+            raise ValueError('dwell_points must have shape (N, 3)')
+        if not np.all(np.isfinite(array)):
+            raise ValueError('dwell_points must be finite.')
+
+        self._dwell_points = array
         self._is_closed = bool(is_closed)
 
     @classmethod
-    def merged(cls, other_raster_points: List[RasterizedPoints]) -> RasterizedPoints:
+    def merged(
+        cls, other_raster_points: t.Sequence[RasterizedPoints], description: t.Optional[str] = None
+    ) -> RasterizedPoints:
         """Create merged :class:`RasterizedPoints` class from list of :class:`RasterizedPoints`.
 
         Args:
             other_raster_points: points to be merged.
+            description (str, optional): description
 
         Returns:
-            RasterizedPoints
+            RasterizedPoints (not closed)
         """
-        total_points = 0
-        for raster_points in other_raster_points:
-            total_points += raster_points.n_points
+        if not all(isinstance(raster_points, RasterizedPoints) for raster_points in other_raster_points):
+            raise TypeError('Only RasterizedPoints can be merged.')
 
-        dwell_points = np.empty(shape=(total_points, 3), dtype=float)
+        if not other_raster_points:
+            return cls(np.empty((0, 3)), False, description)
 
-        i_offset = 0
-        for raster_points in other_raster_points:
-            dwell_points[i_offset:i_offset+raster_points.n_points] = raster_points.dwell_points
-            i_offset += raster_points.n_points
+        dwell_points = np.concatenate([raster_points._dwell_points for raster_points in other_raster_points])
+        return cls(dwell_points, False, description)
 
-        return cls(dwell_points, False)
+    @staticmethod
+    def _read_only(view: np.ndarray) -> np.ndarray:
+        view.flags.writeable = False
+        return view
 
     @property
-    def positions(self):
-        """Coordinates of dwell points.
+    def positions(self) -> np.ndarray:
+        """Coordinates of dwell points (read-only array of shape (N, 2)).
 
         Access:
             get
@@ -65,13 +95,11 @@ class RasterizedPoints(Shape):
         Returns:
             np.ndarray
         """
-        view = self._dwell_points[:, :2]
-        view.flags.writeable = False
-        return view
+        return self._read_only(self._dwell_points[:, :2])
 
     @property
-    def weights(self):
-        """Dwell time multiplicator of dwell points.
+    def weights(self) -> np.ndarray:
+        """Dwell time multiplicator of dwell points (read-only array of shape (N,)).
 
         Access:
             get
@@ -79,13 +107,11 @@ class RasterizedPoints(Shape):
         Returns:
             np.ndarray
         """
-        view = self._dwell_points[:, 2]
-        view.flags.writeable = False
-        return view
+        return self._read_only(self._dwell_points[:, 2])
 
     @property
-    def dwell_points(self):
-        """Dwell points.
+    def dwell_points(self) -> np.ndarray:
+        """Dwell points (read-only array of shape (N, 3): x, y, dwell time multiplicator).
 
         Access:
             get
@@ -93,9 +119,7 @@ class RasterizedPoints(Shape):
         Returns:
             np.ndarray
         """
-        view = self._dwell_points[:]
-        view.flags.writeable = False
-        return view
+        return self._read_only(self._dwell_points[:])
 
     @property
     def n_points(self) -> int:
@@ -114,50 +138,72 @@ class RasterizedPoints(Shape):
         return self._is_closed
 
     def __repr__(self) -> str:
-        return 'RasterizedPoints(...)'
+        return f'{self.__class__.__name__}(n_points={self.n_points}, is_closed={self._is_closed})'
 
     @property
     def bounding_box(self) -> BoundingBox:
-        return BoundingBox.from_points(self.positions)
+        """Bounding box of the points.
+
+        Access:
+            get
+
+        Raises:
+            ValueError: Raised if there are no points.
+        """
+        if not self.n_points:
+            raise ValueError('RasterizedPoints without points have no bounding box.')
+
+        positions = self._dwell_points[:, :2]
+        return BoundingBox(np.min(positions, axis=0), np.max(positions, axis=0))
 
     @property
     def center(self) -> Vector:
-        return Vector(np.mean(self.positions, axis=1))
+        """Center of the bounding box of the points.
 
-    def _impl_translate(self, trans_vec: VectorLike) -> None:
-        self._dwell_points[:, :2] += trans_vec
+        Access:
+            get
+
+        Raises:
+            ValueError: Raised if there are no points.
+        """
+        return self.bounding_box.center
+
+    def _impl_translate(self, trans_vec: Vector) -> None:
+        trans_vec = Vector(trans_vec)
+        self._dwell_points[:, :2] += np.array([trans_vec.x, trans_vec.y])
 
     def _impl_rotate(self, theta: float) -> None:
-        # pylint: disable=invalid-name
         theta = float(theta)
-        m = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+        cos, sin = np.cos(theta), np.sin(theta)
+        rotation = np.array([[cos, -sin], [sin, cos]])
 
-        self._dwell_points[:, :2] = self._dwell_points[:, 2] @ m.T
+        self._dwell_points[:, :2] = self._dwell_points[:, :2] @ rotation.T
 
     def _impl_scale(self, fac: float) -> None:
         self._dwell_points[:, :2] *= float(fac)
 
-    def _impl_mirror(self, mirror_axis: VectorLike) -> None:
-        # pylint: disable=invalid-name
-        mirror_axis = Vector(mirror_axis)
+    def _impl_mirror(self, mirror_axis: Vector) -> None:
+        angle = Vector(mirror_axis).phi
+        cos, sin = np.cos(2 * angle), np.sin(2 * angle)
+        reflection = np.array([[cos, sin], [sin, -cos]])
 
-        lx, ly = mirror_axis
-        mirror_matrix = np.array([[lx*lx - ly*ly, 2*lx*ly], [2*lx*ly, ly*ly - lx*lx]]) / mirror_axis.length
-
-        self._dwell_points[:, :2] = mirror_matrix.dot(self._dwell_points[:, :2].T)
+        self._dwell_points[:, :2] = self._dwell_points[:, :2] @ reflection.T
 
     def repeats_applied(self, repeats: int) -> RasterizedPoints:
-        """Return :class:`RasterizedPoints` with dwel points repeated `repeats` times.
+        """Return :class:`RasterizedPoints` with the dwell points repeated `repeats` times (one after the other).
 
         Args:
-            repeats: number of repeats.
+            repeats (int): number of repeats (at least 1).
 
         Returns:
-            RasterizedPoints
-        """
-        if repeats != 1:
-            # TODO: check and replace
-            # np.tile(self._dwell_points, (repeats, 1))
-            return RasterizedPoints(np.concatenate([self._dwell_points]*repeats), self._is_closed)
+            RasterizedPoints (a new object)
 
-        return self
+        Raises:
+            ValueError: Raised if `repeats` is no positive integer.
+        """
+        if int(repeats) != repeats or repeats < 1:
+            raise ValueError('repeats must be a positive integer.')
+
+        return RasterizedPoints(
+            np.tile(self._dwell_points, (int(repeats), 1)), self._is_closed, self.description
+        )
