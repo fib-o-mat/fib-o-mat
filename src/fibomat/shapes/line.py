@@ -1,35 +1,55 @@
-"""Provides the :class:`Line` class."""
+"""Provides the :class:`Line` class.
 
+Example::
+
+    from fibomat.shapes import Line
+
+    line = Line((0, 0), (3, 4))
+    line.length  # 5.0
+    line.start, line.end, line.center
+    line.distance_to_point((0, 5))  # 3.0
+    line.intersection(Line((0, 4), (3, 0)))  # Vector(x=1.5, y=2.0)
+"""
 from __future__ import annotations
 
-from typing import Optional
+import typing as t
+
+import numpy as np
 
 from fibomat.linalg import BoundingBox, Vector, VectorLike
-from fibomat.shapes import shape
-from fibomat.shapes.arc_spline import ArcSpline, ArcSplineCompatible
+from fibomat.linalg.helpers import GeomLine
+from fibomat.shapes.arc_spline import ArcSpline
+from fibomat.shapes.arc_spline_compatible import ArcSplineCompatible
+from fibomat.shapes.shape import Shape
 
 
-class Line(shape.Shape, ArcSplineCompatible):
-    """1-dim line."""
+__all__ = ['Line']
 
-    def __init__(
-        self, start: VectorLike, end: VectorLike, description: Optional[str] = None
-    ):
+
+class Line(Shape, ArcSplineCompatible):
+    """1-dim line (a line segment from `start` to `end`)."""
+
+    def __init__(self, start: VectorLike, end: VectorLike, description: t.Optional[str] = None):
         """
         Args:
             start (VectorLike): start point of line
             end (VectorLike): end point of line
             description (str, optional): description
+
+        Raises:
+            VectorValueError: Raised if start or end are no vectors.
+            ValueError: Raised if start or end are not finite.
         """
         super().__init__(description)
 
         start = Vector(start)
         end = Vector(end)
 
-        self._line: ArcSpline = ArcSpline([(*start, 0.0), (*end, 0.0)], is_closed=False)
+        # (the finiteness is checked by ArcSpline)
+        self._line: ArcSpline = ArcSpline([(start.x, start.y, 0.0), (end.x, end.y, 0.0)], is_closed=False)
 
     def to_arc_spline(self) -> ArcSpline:
-        return self._line.clone_with_new_description(self.description)
+        return ArcSpline(self._line, description=self.description)
 
     @property
     def start(self) -> Vector:
@@ -69,17 +89,18 @@ class Line(shape.Shape, ArcSplineCompatible):
 
     @property
     def boundary_length(self) -> float:
+        """Length of the line. Same as :attr:`Line.length`.
+
+        Access:
+            get
+
+        Returns:
+            float
+        """
         return self.length
 
-    # def clone(self) -> Line:
-    #     return self.__class__(self._line.clone())
-    #
-    # __copy__ = clone
-
     def __repr__(self) -> str:
-        return "{}(start={!r},end={!r}".format(
-            self.__class__.__name__, self.start, self.end
-        )
+        return f'{self.__class__.__name__}(start={self.start!r}, end={self.end!r})'
 
     @property
     def is_closed(self) -> bool:
@@ -91,31 +112,69 @@ class Line(shape.Shape, ArcSplineCompatible):
 
     @property
     def center(self) -> Vector:
+        """Midpoint of the line.
+
+        Access:
+            get
+
+        Returns:
+            Vector
+        """
         return self._line.center
 
-    def distance_to_point(self, p: Vector):
-        """Returns the shortest distance between self and point p.
+    def distance_to_point(self, p: VectorLike) -> float:  # pylint: disable=invalid-name
+        """Returns the shortest distance between the line segment and the point p.
 
         Args:
-            p (Vector): point
+            p (VectorLike): point
 
-        Returns float
+        Returns:
+            float
         """
-        # https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
+        p = Vector(p)
+        start = self.start
+        direction = self.end - start
 
-        n = (self.end - self.start).normalized()
-        a = self.start
+        length_squared = direction.dot(direction)
+        if length_squared == 0.:
+            return (p - start).mag
 
-        print((p - a), (p - a).dot(n) * n)
+        # parameter of the orthogonal projection of p onto the (infinite) line, clipped to the segment
+        param = min(max((p - start).dot(direction) / length_squared, 0.), 1.)
 
-        return ((p - a) - (p - a).dot(n) * n).mag
+        return (p - (start + direction * param)).mag
 
-    def intersection(self, other: Line):
-        from fibomat.curve_tools.intersections import curve_intersections
+    def intersection(self, other: Line) -> t.Optional[Vector]:
+        """Returns the intersection point of the two line segments.
 
-        return curve_intersections(self._line, other._line)["intersections"][0]["pos"]
+        Args:
+            other (Line): other line
 
-    def _impl_translate(self, trans_vec: VectorLike) -> None:
+        Returns:
+            Optional[Vector]: intersection point or None if the segments do not intersect or are parallel.
+        """
+        if not isinstance(other, Line):
+            raise TypeError('other must be a Line.')
+
+        if self.length == 0. or other.length == 0.:
+            return None
+
+        line_1 = GeomLine(self.end - self.start, self.start)
+        line_2 = GeomLine(other.end - other.start, other.start)
+
+        if line_1.parallel_to(line_2):
+            return None
+
+        param_1 = line_1.intersect_at_param(line_2)
+        param_2 = line_2.intersect_at_param(line_1)
+
+        tol = 1e-12
+        if not (-tol <= param_1 <= 1. + tol and -tol <= param_2 <= 1. + tol):
+            return None
+
+        return Vector(line_1(param_1))
+
+    def _impl_translate(self, trans_vec: Vector) -> None:
         self._line._impl_translate(trans_vec)  # pylint: disable=protected-access
 
     def _impl_rotate(self, theta: float) -> None:
@@ -124,5 +183,5 @@ class Line(shape.Shape, ArcSplineCompatible):
     def _impl_scale(self, fac: float) -> None:
         self._line._impl_scale(fac)  # pylint: disable=protected-access
 
-    def _impl_mirror(self, mirror_axis: VectorLike) -> None:
+    def _impl_mirror(self, mirror_axis: Vector) -> None:
         self._line._impl_mirror(mirror_axis)  # pylint: disable=protected-access
