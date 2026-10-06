@@ -1,128 +1,154 @@
-"""Provides the :class:`ArcSpline` and :class:`ArcSplineCompatible` classes."""
+"""Provides the :class:`ArcSpline` class.
 
+An arc spline is a curve of straight line segments and circular arcs, stored as list of vertices ``(x, y, bulge)``.
+The bulge of a vertex describes the segment from this vertex to the next one: ``bulge = tan(angle / 4)`` where `angle`
+is the sweep angle of the arc (0 for lines, positive for counterclockwise arcs, ``|bulge| <= 1``). If the curve is
+closed, the last vertex is connected to the first one.
+
+Example::
+
+    import numpy as np
+    from fibomat.shapes import ArcSpline
+
+    # closed curve: a square with a half circle on the right hand side
+    spline = ArcSpline(np.array([(0, 0, 0), (1, 0, 1), (1, 1, 0), (0, 1, 0)]), is_closed=True)
+
+    spline.area, spline.length, spline.bounding_box
+    spline.contains((0.5, 0.5))
+    spline.segments  # [Line, Arc, Line, Line]
+    spline.rotated(np.pi / 2, origin='center')
+"""
 from __future__ import annotations
-from typing import (
-    Optional,
-    Union,
-    Sequence,
-    Iterable,
-    Protocol,
-    runtime_checkable,
-    Tuple,
-    List,
-    Dict,
-)
+
+import operator
+import typing as t
+import warnings
 
 import numpy as np
 
-from fibomat.linalg import VectorLike, Vector, BoundingBox
+from fibomat import _libfibomat
+from fibomat.linalg import BoundingBox, Vector, VectorLike
+from fibomat.shapes.arc_spline_compatible import ArcSplineCompatible
 from fibomat.shapes.shape import Shape
 
-from fibomat import _libfibomat
+
+__all__ = ['ArcSpline', 'ArcSplineCompatible']
 
 
-@runtime_checkable
-class ArcSplineCompatible(Protocol):  # pylint: disable=too-few-public-methods
-    """Abstract class can be used to mark ArcSpline compatible shapes."""
+_BULGE_TOL = 1e-9
+"""Bulge values up to 1 + _BULGE_TOL are accepted (and clipped to 1) to tolerate rounding errors."""
 
-    def to_arc_spline(self) -> ArcSpline:
-        """
-        Transform shape to ArcSpline.
 
-        Returns:
-            ArcSpline
-        """
-        raise NotImplementedError
+def _is_line(bulge: float) -> bool:
+    return bool(np.isclose(bulge, 0.0))
+
+
+def _as_vertex_array(vertices: t.Any) -> np.ndarray:
+    """Convert and validate vertices (x, y, bulge)."""
+    try:
+        array = np.array(vertices, dtype=float)
+    except (TypeError, ValueError) as error:
+        raise ValueError('vertices must be an array of floats with shape (n, 3).') from error
+
+    if array.ndim != 2 or array.shape[1] != 3:
+        raise ValueError(f'vertices must have shape (n, 3) with columns (x, y, bulge), got {array.shape}.')
+    if not np.all(np.isfinite(array)):
+        raise ValueError('vertices must be finite.')
+    if np.any(np.abs(array[:, 2]) > 1. + _BULGE_TOL):
+        raise ValueError('|bulge| must not be larger than 1 (arcs sweep at most a half circle). Split larger arcs.')
+
+    array[:, 2] = np.clip(array[:, 2], -1., 1.)
+    return array
 
 
 class ArcSpline(Shape, ArcSplineCompatible):
     """Class represents a spline containing circular arcs and straight line segments. The spline is C^0, hence,
     continuous but not differentiable.
+
+    The curve consists of at least two vertices. Arcs sweep at most a half circle (``|bulge| <= 1``).
     """
 
     def __init__(
         self,
-        arc_spline: Union[_libfibomat.ArcSpline, np.ndarray],
-        is_closed: Optional[bool] = None,
-        description: Optional[str] = None,
+        arc_spline: t.Union[_libfibomat.ArcSpline, ArcSpline, np.ndarray, t.Sequence[t.Sequence[float]]],
+        is_closed: t.Optional[bool] = None,
+        description: t.Optional[str] = None,
     ):
         """
         Args:
-            arc_spline (_libfibomat.ArcSpline, np.ndarray):
-                np.ndarray must have shape = (-1, 3) where each point is given by (x, y, bulge).
+            arc_spline (_libfibomat.ArcSpline, ArcSpline, np.ndarray):
+                np.ndarray (or nested sequence) must have shape = (n, 3) where each point is given by (x, y, bulge).
             is_closed (bool, optional):
                 if True, the last and first point are connected (potentially with an arc, if the bulge value of the last
-                vertex is nonzero). if False, the bulge value of the last point is ignored. The argumetn must be given
-                if arc_spline is np.ndarray and is ignored if arc_spline is _libfibomat.ArcSpline.
+                vertex is nonzero). if False, the bulge value of the last point is ignored. The argument must be given
+                if arc_spline contains vertices and is ignored if arc_spline is a native or an ArcSpline.
             description (str, optional): description
 
         Raises:
-            ValueError: Raised if arc_spline is np.ndarray but is_closed not given.
+            ValueError: Raised if arc_spline contains vertices but is_closed is not given, the vertices are invalid
+                (wrong shape, not finite, |bulge| > 1) or there are less than two vertices.
         """
         super().__init__(description)
+
+        if isinstance(arc_spline, ArcSpline):
+            arc_spline = arc_spline._arc_spline  # pylint: disable=protected-access
 
         if isinstance(arc_spline, _libfibomat.ArcSpline):
             self._arc_spline = _libfibomat.ArcSpline(arc_spline)
         else:
             if is_closed is None:
-                raise ValueError(
-                    "is_closed must be defined if ArcSpline is build from vertices."
-                )
-            self._arc_spline = _libfibomat.ArcSpline(arc_spline, is_closed)
+                raise ValueError('is_closed must be defined if ArcSpline is build from vertices.')
+            self._arc_spline = _libfibomat.ArcSpline(_as_vertex_array(arc_spline), bool(is_closed))
 
-        # self._vertices = np.array(self._arc_spline.vertices)
-        # self._vertices.flags.writeable = False
-
-    def __copy__(self):
-        return self.__class__(
-            arc_spline=self._arc_spline.clone(), description=self.description
-        )
-
-    def __deepcopy__(self, memodict):
-        return self.__copy__()
+        if self._arc_spline.size < 2:
+            raise ValueError('An ArcSpline needs at least two vertices.')
 
     def __len__(self) -> int:
         return self._arc_spline.size
 
-    # shape.Shape methods
+    # construction
 
     @classmethod
-    def from_segments(
-        cls, segments: Iterable[ArcSplineCompatible], description: Optional[str] = None
-    ):
+    def from_segments(cls, segments: t.Iterable[ArcSplineCompatible], description: t.Optional[str] = None) -> ArcSpline:
         """Build an ArcSpline from connected segments.
 
         Args:
             segments (Iterable[ArcSplineCompatible]):
-                segments. the start and end point of to consecutive segments must be equal. If this also holds for the
-                last and first segment, the curve ist closed.
+                segments. the start and end point of two consecutive segments must be equal. If this also holds for the
+                last and first segment, the curve is closed. A single closed segment results in a closed curve.
             description (str, optional): description.
 
         Returns:
             ArcSpline
 
         Raises:
-            RuntimeError: Raised if segments are not connected.
+            ValueError: Raised if there are no segments.
+            RuntimeError: Raised if segments are not connected or some of several segments are closed.
         """
-        vertices: List[np.ndarray] = []
+        splines = [seg.to_arc_spline() for seg in segments]
 
-        for i_seg, seg in enumerate(segments):
-            arc_spline = seg.to_arc_spline()
+        if not splines:
+            raise ValueError('segments must not be empty.')
 
-            if arc_spline.is_closed and i_seg > 0:
-                raise RuntimeError(
-                    "Cannot build ArcSpline from segments because some segments are closed."
-                )
+        if len(splines) == 1:
+            return cls(splines[0], description=description)
 
-            seg_vertices = np.array(arc_spline.vertices)
+        vertices: t.List[np.ndarray] = []
+
+        for spline in splines:
+            if spline.is_closed:
+                raise RuntimeError('Cannot build ArcSpline from segments because some segments are closed.')
+
+            seg_vertices = spline.vertices
 
             if vertices:
                 if not np.allclose(vertices[-1][-1, :2], seg_vertices[0, :2]):
                     raise RuntimeError(
-                        "Segments are not C^0. The distance is {}".format(
+                        'Segments are not C^0. The distance is {}'.format(
                             np.linalg.norm(vertices[-1][-1, :2] - seg_vertices[0, :2])
                         )
                     )
+                # the last vertex of a segment has no bulge, the bulge of the next segment's start is used instead
                 vertices[-1][-1] = seg_vertices[0]
                 vertices.append(seg_vertices[1:])
             else:
@@ -136,7 +162,7 @@ class ArcSpline(Shape, ArcSplineCompatible):
         return cls(conc_vertices, False, description)
 
     @classmethod
-    def from_shape(cls, segment: ArcSplineCompatible):
+    def from_shape(cls, segment: ArcSplineCompatible) -> ArcSpline:
         """Converts a single segment to an ArcSpline.
 
         Args:
@@ -147,26 +173,14 @@ class ArcSpline(Shape, ArcSplineCompatible):
         """
         return segment.to_arc_spline()
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(start={self.start}, end={self.end}, description={self.description})"
-
-    @property
-    def is_closed(self) -> bool:
-        return self._arc_spline.is_closed
-
     def to_arc_spline(self) -> ArcSpline:
         return self
 
-    # Transformable methods
+    def clone_with_new_description(self, description: t.Optional[str] = None) -> ArcSpline:
+        """Similar to :meth:`ArcSpline.clone` but set the description to the passed description.
 
-    def clone(self) -> ArcSpline:
-        return self.__class__(
-            arc_spline=self._arc_spline.clone(),
-            description=self.description,
-        )
-
-    def clone_with_new_description(self, description: Optional[str] = None):
-        """Similar to :meth:`ArcSpline.clone` but set the description the passed description.
+        .. deprecated:: 0.6.0
+            Use :meth:`fibomat.describable.Describable.with_changed_description` instead.
 
         Args:
             description (str, optional): description.
@@ -174,33 +188,45 @@ class ArcSpline(Shape, ArcSplineCompatible):
         Returns:
             ArcSpline
         """
-        return self.__class__(
-            arc_spline=self._arc_spline.clone(), description=description
+        warnings.warn(
+            'clone_with_new_description is deprecated, use with_changed_description instead.',
+            category=DeprecationWarning,
+            stacklevel=2,
         )
+        clone = self.clone()
+        clone._description = str(description) if description else None  # pylint: disable=protected-access
+        return clone
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}(start={self.start}, end={self.end}, description={self.description})'
+
+    # shape interface
+
+    @property
+    def is_closed(self) -> bool:
+        return self._arc_spline.is_closed
 
     @property
     def bounding_box(self) -> BoundingBox:
-        # return BoundingBox(*self._arc_spline.bounding_box)
-
-        # there is a bug in cavc bounding box calculation for multiple arc segments (cf. examples/fill_lines.py without this hacky code)
-
-        segments = self.segments
-
-        if len(segments) > 1:
-            bbox = segments[0].bounding_box
-            for seg in segments[1:]:
-                bbox = bbox.extended(seg.bounding_box)
-
-            return bbox
-        else:
-            return BoundingBox(*self._arc_spline.bounding_box)
+        return BoundingBox(*self._arc_spline.bounding_box)
 
     @property
     def center(self) -> Vector:
+        """Center of the curve, defined as the center of its bounding box.
+
+        .. note:: This is neither the mean of the vertices nor the centroid of the enclosed area.
+
+        Access:
+            get
+
+        Returns:
+            Vector
+        """
         return Vector(self._arc_spline.center)
 
-    def _impl_translate(self, trans_vec: VectorLike) -> None:
-        self._arc_spline.impl_translate(trans_vec)
+    def _impl_translate(self, trans_vec: Vector) -> None:
+        trans_vec = Vector(trans_vec)
+        self._arc_spline.impl_translate((trans_vec.x, trans_vec.y))
 
     def _impl_scale(self, fac: float) -> None:
         self._arc_spline.impl_scale(fac)
@@ -208,8 +234,38 @@ class ArcSpline(Shape, ArcSplineCompatible):
     def _impl_rotate(self, theta: float) -> None:
         self._arc_spline.impl_rotate(theta)
 
-    def _impl_mirror(self, mirror_axis: VectorLike) -> None:
-        self._arc_spline.impl_mirror(mirror_axis)
+    def _impl_mirror(self, mirror_axis: Vector) -> None:
+        mirror_axis = Vector(mirror_axis)
+        self._arc_spline.impl_mirror((mirror_axis.x, mirror_axis.y))
+
+    @property
+    def area(self) -> float:
+        """Area enclosed by the curve (non-negative).
+
+        Access:
+            get
+
+        Returns:
+            float
+
+        Raises:
+            NotImplementedError: Raised if the curve is not closed.
+        """
+        if not self.is_closed:
+            raise NotImplementedError('The area is only defined for closed curves.')
+        return abs(self._arc_spline.area)
+
+    @property
+    def boundary_length(self) -> float:
+        """Length of the curve. Same as :attr:`ArcSpline.length`.
+
+        Access:
+            get
+
+        Returns:
+            float
+        """
+        return self.length
 
     # other utility methods
 
@@ -227,7 +283,7 @@ class ArcSpline(Shape, ArcSplineCompatible):
 
     @property
     def end(self) -> Vector:
-        """End point curve
+        """End point curve. For closed curves, this is the start point.
 
         Access:
             get
@@ -242,7 +298,7 @@ class ArcSpline(Shape, ArcSplineCompatible):
 
     @property
     def vertices(self) -> np.ndarray:
-        """Curve vertices.
+        """Curve vertices as (a copy of an) array with shape (n, 3). The columns are x, y and bulge.
 
         Access:
             get
@@ -250,10 +306,10 @@ class ArcSpline(Shape, ArcSplineCompatible):
         Returns:
             np.ndarray
         """
-        return np.array(self._arc_spline.vertices)
+        return self._arc_spline.vertices_array
 
     @property
-    def segments(self) -> Sequence[ArcSplineCompatible]:
+    def segments(self) -> t.Sequence[ArcSplineCompatible]:
         """Return a list of Line and Arc elements representing the curve.
 
         .. note:: This method is not bijective with regard to the added shapes. E.g. if the curve was constructed from a
@@ -263,29 +319,32 @@ class ArcSpline(Shape, ArcSplineCompatible):
             get
 
         Returns:
-            List[shape.Shape]
+            List[Shape]
         """
+        vertices = self.vertices
+        n_vertices = len(vertices)
+        n_segments = n_vertices if self.is_closed else n_vertices - 1
+
+        return [self._make_segment(vertices[i], vertices[(i + 1) % n_vertices]) for i in range(n_segments)]
+
+    @staticmethod
+    def _make_segment(start_vertex: np.ndarray, end_vertex: np.ndarray) -> Shape:
+        """Line or Arc from the vertex `start_vertex` to `end_vertex`."""
         from fibomat.shapes.line import Line  # pylint: disable=import-outside-toplevel
         from fibomat.shapes.arc import Arc  # pylint: disable=import-outside-toplevel
 
-        def _make_segment(start_vertex, end_vertex):
-            if np.isclose(start_vertex[2], 0.0):
-                return Line(start_vertex[:2], end_vertex[:2])
+        if _is_line(start_vertex[2]):
+            return Line(start_vertex[:2], end_vertex[:2])
 
-            return Arc.from_bulge(start_vertex[:2], end_vertex[:2], start_vertex[2])
-
-        segments = []
-        vertices = self.vertices
-        for i, vertex in enumerate(vertices[1:], start=1):
-            segments.append(_make_segment(vertices[i - 1], vertex))
-
-        if self.is_closed:
-            segments.append(_make_segment(vertices[-1], vertices[0]))
-
-        return segments
+        return Arc.from_bulge(start_vertex[:2], end_vertex[:2], start_vertex[2])
 
     @property
     def arc_spline_impl(self) -> _libfibomat.ArcSpline:
+        """The underlying native curve. It must not be modified.
+
+        Access:
+            get
+        """
         return self._arc_spline
 
     @property
@@ -304,7 +363,7 @@ class ArcSpline(Shape, ArcSplineCompatible):
 
     @property
     def length(self) -> float:
-        """Length of curve.
+        """Length of curve (including the closing segment for closed curves).
 
         Access:
             get
@@ -314,21 +373,66 @@ class ArcSpline(Shape, ArcSplineCompatible):
         """
         return self._arc_spline.length
 
-    @property
-    def area(self) -> float:
-        return abs(self._arc_spline.area)
+    def contains(self, pos: VectorLike) -> bool:
+        """Check if the point lies in the area enclosed by the curve.
 
-    def contains(self, pos: VectorLike):
+        Args:
+            pos (VectorLike): point
+
+        Returns:
+            bool
+
+        Raises:
+            RuntimeError: Raised if the curve is not closed.
+        """
         pos = Vector(pos)
-        return self._arc_spline.contains(pos.x, pos.y)
+        return bool(self._arc_spline.contains(pos.x, pos.y))
 
-    def closest_point(self, pos: VectorLike) -> Dict:
+    def closest_point(self, pos: VectorLike) -> t.Dict[str, t.Any]:
+        """Find the point of the curve closest to `pos`.
+
+        Args:
+            pos (VectorLike): point
+
+        Returns:
+            Dict: `segment` (index of the segment), `point` (closest point as Vector), `distance` (to `pos`)
+        """
         pos = Vector(pos)
-        res = self._arc_spline.closest_point(pos.x, pos.y)
+        segment, point, distance = self._arc_spline.closest_point(pos.x, pos.y)
 
-        return {"segment": pos[0], "point": Vector(res[1]), "distance": res[2]}
+        return {'segment': segment, 'point': Vector(point), 'distance': distance}
 
-    def unit_tangents(self, i_vertex: int) -> Tuple[Optional[Vector], Optional[Vector]]:
+    # tangents, kinks, segments around vertices
+
+    def _check_vertex_index(self, i_vertex: int) -> int:
+        try:
+            i_vertex = operator.index(i_vertex)
+        except TypeError as error:
+            raise TypeError('i_vertex must be an integer.') from error
+
+        if not 0 <= i_vertex < self._arc_spline.size:
+            raise ValueError(f'i_vertex must be in [0, {self._arc_spline.size - 1}], got {i_vertex}.')
+        return i_vertex
+
+    def _has_segment_before(self, i_vertex: int) -> bool:
+        return i_vertex != 0 or self.is_closed
+
+    def _has_segment_after(self, i_vertex: int) -> bool:
+        return i_vertex != self._arc_spline.size - 1 or self.is_closed
+
+    @staticmethod
+    def _unit_tangents_of_segment(start_vertex: np.ndarray, end_vertex: np.ndarray) -> t.Tuple[Vector, Vector]:
+        """Unit tangents at the start and the end of the segment."""
+        from fibomat.shapes.arc import Arc  # pylint: disable=import-outside-toplevel
+
+        if _is_line(start_vertex[2]):
+            direction = Vector(end_vertex[:2] - start_vertex[:2]).normalized()
+            return direction, direction
+
+        arc = Arc.from_bulge(start_vertex[:2], end_vertex[:2], start_vertex[2])
+        return Vector(arc.unit_tangent_start), Vector(arc.unit_tangent_end)
+
+    def unit_tangents(self, i_vertex: int) -> t.Tuple[t.Optional[Vector], t.Optional[Vector]]:
         """Unit tangents at vertex i_vertex.
 
         Args:
@@ -339,115 +443,78 @@ class ArcSpline(Shape, ArcSplineCompatible):
                 left tangent, right tangent. If any of the two tangents does not exist, the tuple entry will be None.
 
         Raises:
-            ValueError: Raised if i_vertex > #segmens.
+            ValueError: Raised if i_vertex is not a vertex index.
         """
-        from fibomat.shapes.arc import Arc  # pylint: disable=import-outside-toplevel
+        i_vertex = self._check_vertex_index(i_vertex)
+        vertices = self.vertices
+        n_vertices = len(vertices)
 
-        if i_vertex < self._arc_spline.size:
-            vertices = self.vertices
-            vertex = vertices[i_vertex]
+        first_tangent = None
+        second_tangent = None
 
-            first_tangent = None
-            second_tangent = None
+        if self._has_segment_before(i_vertex):
+            before = (i_vertex - 1) % n_vertices
+            first_tangent = self._unit_tangents_of_segment(vertices[before], vertices[i_vertex])[1]
 
-            if i_vertex != 0 or self.is_closed:
-                vertex_before = vertices[(i_vertex - 1) % len(vertices)]
+        if self._has_segment_after(i_vertex):
+            second_tangent = self._unit_tangents_of_segment(vertices[i_vertex], vertices[(i_vertex + 1) % n_vertices])[0]
 
-                if np.isclose(vertex_before[2], 0.0):
-                    first_tangent = vertex[:2] - vertex_before[:2]
-                    first_tangent /= np.linalg.norm(first_tangent)
-                else:
-                    arc = Arc.from_bulge(
-                        vertex_before[:2], vertex[:2], vertex_before[2]
-                    )
-                    first_tangent = arc.unit_tangent_end
+        return first_tangent, second_tangent
 
-            if i_vertex != self._arc_spline.size - 1 or self.is_closed:
-                vertex_next = vertices[(i_vertex + 1) % len(vertices)]
-
-                if np.isclose(vertex[2], 0.0):
-                    second_tangent = vertex_next[:2] - vertex[:2]
-                    second_tangent /= np.linalg.norm(second_tangent)
-                else:
-                    arc = Arc.from_bulge(vertex[:2], vertex_next[:2], vertex[2])
-                    second_tangent = arc.unit_tangent_start
-
-            return first_tangent, second_tangent
-
-        raise ValueError("i_vertex >= number of segments.")
-
-    def kinks(self) -> List[int]:
+    def kinks(self) -> t.List[int]:
         """Return kinks (non differentiable points) of the spline.
 
         Returns:
              List[int]: vertex indices of kinks.
         """
-        tangents = [self.unit_tangents(i) for i in range(len(self.vertices))]
+        vertices = self.vertices
+        n_vertices = len(vertices)
+        n_segments = n_vertices if self.is_closed else n_vertices - 1
+
+        # tangents (at start and end) of each segment are evaluated only once
+        tangents = [
+            self._unit_tangents_of_segment(vertices[i], vertices[(i + 1) % n_vertices]) for i in range(n_segments)
+        ]
 
         kinks = []
-
-        if self.is_closed:
-            if not np.allclose(tangents[0][0], tangents[0][1]):
-                kinks.append(0)
-
-        for i in range(1, len(self.vertices) - 1):
-            if not np.allclose(tangents[i][0], tangents[i][1]):
-                kinks.append(i)
-
-        if self.is_closed:
-            if not np.allclose(tangents[-1][0], tangents[-1][1]):
-                kinks.append(len(self.vertices) - 1)
+        for i_vertex in range(n_vertices):
+            if self._has_segment_before(i_vertex) and self._has_segment_after(i_vertex):
+                tangent_before = tangents[(i_vertex - 1) % n_segments][1]
+                tangent_after = tangents[i_vertex][0]
+                if not np.allclose(tangent_before, tangent_after):
+                    kinks.append(i_vertex)
 
         return kinks
 
-    def segments_at_vertex(
-        self, i_vertex: int
-    ) -> Tuple[Optional[Shape], Optional[Shape]]:
+    def segments_at_vertex(self, i_vertex: int) -> t.Tuple[t.Optional[Shape], t.Optional[Shape]]:
         """Return the segments around the vertex with index i_vertex.
 
         Args:
-            i_vertex: vertex index
+            i_vertex (int): vertex index
 
         Returns:
             Tuple[Optional[Shape], Optional[Shape]]:
                 left and right segments. If any of the segments is not defined, the tuple entry will be None.
 
         Raises:
-            ValueError: Raised if i_vertex > #segmens.
+            ValueError: Raised if i_vertex is not a vertex index.
         """
-        from fibomat.shapes.arc import Arc  # pylint: disable=import-outside-toplevel
-        from fibomat.shapes.line import Line  # pylint: disable=import-outside-toplevel
+        i_vertex = self._check_vertex_index(i_vertex)
+        vertices = self.vertices
+        n_vertices = len(vertices)
 
-        if i_vertex < self._arc_spline.size:
-            vertices = self.vertices
-            vertex = vertices[i_vertex]
+        first_seg = None
+        second_seg = None
 
-            first_seg = None
-            second_seg = None
+        if self._has_segment_before(i_vertex):
+            first_seg = self._make_segment(vertices[(i_vertex - 1) % n_vertices], vertices[i_vertex])
 
-            if i_vertex != 0 or self.is_closed:
-                vertex_before = vertices[(i_vertex - 1) % len(vertices)]
+        if self._has_segment_after(i_vertex):
+            second_seg = self._make_segment(vertices[i_vertex], vertices[(i_vertex + 1) % n_vertices])
 
-                if np.isclose(vertex_before[2], 0.0):
-                    first_seg = Line(vertex_before[:2], vertex[:2])
-                else:
-                    first_seg = Arc.from_bulge(
-                        vertex_before[:2], vertex[:2], vertex_before[2]
-                    )
+        return first_seg, second_seg
 
-            if i_vertex != self._arc_spline.size - 1 or self.is_closed:
-                vertex_next = vertices[(i_vertex + 1) % len(vertices)]
-
-                if np.isclose(vertex[2], 0.0):
-                    second_seg = Line(vertex[:2], vertex_next[:2])
-                else:
-                    second_seg = Arc.from_bulge(vertex[:2], vertex_next[:2], vertex[2])
-
-            return first_seg, second_seg
-
-        raise ValueError("i_vertex >= number of segments.")
-
-    def reversed(self):
+    def reversed(self) -> ArcSpline:
         """Return a reversed copy of the arc spline
 
         Returns:
