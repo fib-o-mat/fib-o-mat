@@ -17,7 +17,12 @@ DimTransformableT = TypeVar('DimTransformableT', bound=DimTransformable)
 class Pattern(DimTransformable, Generic[DimTransformableT]):
     """
     Class is used to collect a shape with a length unit,  mill settings and optional settings.
+
+    Clones of a pattern (e.g. the copies created by transformations or lattices) copy the shape but share the mill and
+    the raster style, which are treated as immutable configurations.
     """
+
+    _shared_attributes = ('_mill', '_raster_style')
 
     def __init__(
         self,

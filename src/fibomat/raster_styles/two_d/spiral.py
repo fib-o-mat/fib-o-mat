@@ -79,7 +79,7 @@ class Spiral(RasterStyle):
 
         spiral_pitch=scale_to(out_length_unit, self._spiral_pitch)
         tang_pitch=scale_to(out_length_unit, self._pitch)
-        dim_shape.set_unit(out_length_unit)  # scaling the shape too prevents memory overload from to big theta_max
+        dim_shape = dim_shape.to(out_length_unit)  # scaling the shape too prevents memory overload from to big theta_max
 
         spline_shape = dim_shape.shape.to_arc_spline() 
 
