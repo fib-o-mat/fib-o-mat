@@ -327,14 +327,7 @@ class TestRasterizedPlot:
 
 class TestReducedLattices:
     def test_only_four_elements_and_a_hatched_outline(self):
-        elements = np.empty((3, 4), dtype=object)
-        flat = []
-        for v in range(3):
-            for u in range(4):
-                element = Rect(1, 1).translated((3 * u, -3 * v)) * unit('µm')
-                elements[v, u] = element
-                flat.append(element)
-        lattice = DimLattice(flat, elements)
+        lattice = DimLattice.from_counts(4, 3, 3. * unit('µm'), 3. * unit('µm'), Rect(1, 1) * unit('µm'))
 
         layout = Layout()
         layout.create_site(um(0, 0), um(50, 50)).create_pattern(lattice, mill(), area_style())

@@ -81,3 +81,10 @@ Open points which are postponed on purpose.
 ## Arrangements
 
 - (see "What does center mean?": the center of `Group` is the mean of the centers of the elements for now.)
+- Lattices: the points which lie exactly on the boundary of the shape of `from_boundary` are not included (`contains` is
+  true for interior points only). Decide if points on the boundary should be included (with a tolerance).
+- Lattices: there is no custom ordering of the points anymore (the removed `predicate`); `fast_axis` only selects
+  row by row or column by column. Add an `order` argument (e.g. a key function of the lattice indices or coordinates) if
+  serpentine or spiral orders are needed.
+- `Lattice.elements_by_uv` and `points_uv` are calculated/copied on every access; cache them if lattices with very many
+  elements are used in loops.

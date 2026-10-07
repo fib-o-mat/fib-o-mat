@@ -1,44 +1,33 @@
-# from fibomat.shapes.dim_shape import DimShape
-from typing import List, Tuple
+"""Helpers of the arrangements."""
+from __future__ import annotations
+
+import typing as t
 
 import numpy as np
 
-# from fibomat.shapes import Shape, DimShape
-# from fibomat.layout.pattern import Pattern
-# from fibomat.linalg import Vector
+
+__all__ = ['check_lattice_vectors']
 
 
-# def _have_same_type(objs: List) -> bool:
-#     objs_iter = iter(objs)
-#     first_elem = next(objs_iter)
+def check_lattice_vectors(u: t.Any, v: t.Any) -> None:
+    """Check that two vectors can be the basis vectors of a lattice: they must not be null vectors and must not be
+    collinear.
 
-#     if isinstance(first_elem, Shape):
-#         base = Shape
-#     elif isinstance(first_elem, DimShape):
-#         base = DimShape
-#     elif isinstance(first_elem, Pattern):
-#         base = Pattern
-#     else:
-#         base = type(first_elem)
+    Args:
+        u (VectorLike): first lattice vector (unitless numbers or the coordinates in one unit)
+        v (VectorLike): second lattice vector
 
-#     print(base, [isinstance(obj, base) for obj in objs_iter])
-#     print(objs)
+    Raises:
+        ValueError: Raised if a vector is the null vector or the vectors are collinear.
+    """
+    u_array = np.asarray(u, dtype=float)
+    v_array = np.asarray(v, dtype=float)
 
-#     return all(isinstance(obj, base) for obj in objs_iter)
+    length_u = float(np.hypot(*u_array))
+    length_v = float(np.hypot(*v_array))
+    if length_u == 0. or length_v == 0.:
+        raise ValueError('The lattice vectors must not be the null vector.')
 
-
-def _check_lattice_vectors(u, v) -> None:
-    if np.isclose(abs(np.dot(np.array(u), np.array(v))), 1):
-        raise ValueError('Lattice vectors may not be collinear.')
-
-
-def _round_towards_mean(a: float, b: float) -> Tuple[int, int]:
-    flipped = False
-    if a > b:
-        flipped = True
-        a, b = b, a
-
-    a = np.ceil(a)
-    b = np.floor(b)
-
-    return (b, a) if flipped else (a, b)
+    cross = u_array[0] * v_array[1] - u_array[1] * v_array[0]
+    if abs(cross) <= 1e-9 * length_u * length_v:
+        raise ValueError('The lattice vectors must not be collinear.')
