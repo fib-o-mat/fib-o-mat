@@ -54,24 +54,13 @@ class _Annotation:
 BackendT = t.TypeVar('BackendT')
 
 
-def _registry() -> t.Any:
-    """Return the backend registry (imported lazily because the backends depend on this package).
-
-    The default backends are imported, too, because this registers them.
-    """
-    # pylint: disable=import-outside-toplevel,unused-import
-    import fibomat.default_backends  # noqa: F401
-    from fibomat.backend import registry
-    return registry
-
-
 class Layout(Describable):
     """A layout is the pattern design for a sample.
 
     This class is the glueing between all subcomponents of the library: a layout consists of
     :class:`~fibomat.layout.site.Site` objects (a field of view at a position), which hold
     :class:`~fibomat.layout.pattern.Pattern` objects (a shape with a mill and a raster style). A layout is exported
-    with the help of registered backends or plotted.
+    with the help of backends or plotted.
     """
 
     def __init__(self, *, description: t.Optional[str] = None, fov_scale: float = DEFAULT_FOV_SCALE):
@@ -294,13 +283,22 @@ class Layout(Describable):
         return plotter
 
     @staticmethod
-    def _backend_class(exp_backend: t.Union[str, t.Type[BackendT]]) -> t.Type[BackendT]:
-        """Return the backend class of a registered name or the class itself."""
-        if isinstance(exp_backend, str):
-            return _registry().get(exp_backend)  # type: ignore[no-any-return]
+    def _check_backend(exp_backend: t.Any) -> t.Type[BackendT]:
+        """Check that `exp_backend` is a backend class.
+
+        Raises:
+            TypeError: Raised if `exp_backend` is no subclass of BackendBase (e.g. a backend name or an instance).
+        """
+        from fibomat.backend import BackendBase  # pylint: disable=import-outside-toplevel
+
+        if not (isinstance(exp_backend, type) and issubclass(exp_backend, BackendBase)):
+            raise TypeError(
+                f'The backend must be passed as class (a subclass of BackendBase), got {exp_backend!r}. '
+                'Backends are not registered by name; e.g. use `layout.export(SpotListBackend)`.'
+            )
         return exp_backend
 
-    def export(self, exp_backend: t.Union[str, t.Type[BackendT]], **kwargs: t.Any) -> BackendT:
+    def export(self, exp_backend: t.Type[BackendT], **kwargs: t.Any) -> BackendT:
         """Exports the layout. Note that the method returns the backend object so you will be able to save a file or
         show a plot. See the docs of the backends for details.
 
@@ -308,20 +306,19 @@ class Layout(Describable):
                   docs of the used backend for details.
 
         Args:
-            exp_backend (str, Type[BackendBase]): name of the backend or class. The backend must be registered before
-                if a name is used.
+            exp_backend (Type[BackendBase]): backend class
             **kwargs: optional arguments are passed to the backend's __init__ method
 
         Returns:
             BackendBase
 
         Raises:
-            KeyError: Raised if no backend is registered with the name `exp_backend`.
+            TypeError: Raised if `exp_backend` is no backend class.
         """
         kwargs.setdefault('description', self._description)
-        return self._export(self._backend_class(exp_backend), self._sites, **kwargs)
+        return self._export(self._check_backend(exp_backend), self._sites, **kwargs)
 
-    def export_multi(self, exp_backend: t.Union[str, t.Type[BackendT]], **kwargs: t.Any) -> t.List[BackendT]:
+    def export_multi(self, exp_backend: t.Type[BackendT], **kwargs: t.Any) -> t.List[BackendT]:
         """Similar to :meth:`Layout.export` but for each :class:`~fibomat.layout.site.Site` an individual backend
         instance is returned.
 
@@ -329,27 +326,27 @@ class Layout(Describable):
         time.
 
         Args:
-            exp_backend (str, Type[BackendBase]): name of the backend or class
+            exp_backend (Type[BackendBase]): backend class
             **kwargs: optional arguments are passed to the backend's __init__ method
 
         Returns:
             List[BackendBase]: one backend per site
         """
-        backend_class = self._backend_class(exp_backend)
+        backend_class = self._check_backend(exp_backend)
         kwargs.setdefault('description', self._description)
 
         return [self._export(backend_class, site, **kwargs) for site in self._sites]
 
     def export_with_description(
         self,
-        exp_backend: t.Union[str, t.Type[BackendT]],
+        exp_backend: t.Type[BackendT],
         descr_pattern: t.Set[str],
         **kwargs: t.Any,
     ) -> BackendT:
         """Exports only the sites with a matching description. Otherwise identical to :meth:`Layout.export`.
 
         Args:
-            exp_backend (str, Type[BackendBase]): name of the backend or class
+            exp_backend (Type[BackendBase]): backend class
             descr_pattern (Set[str]): regular expressions; only sites with a description which matches (with
                 :func:`re.match`) one of them are exported.
             **kwargs: optional arguments are passed to the backend's __init__ method
@@ -362,7 +359,7 @@ class Layout(Describable):
         """
         kwargs.setdefault('description', self._description)
         return self._export(
-            self._backend_class(exp_backend), self._sites, descr_pattern=set(descr_pattern), **kwargs
+            self._check_backend(exp_backend), self._sites, descr_pattern=set(descr_pattern), **kwargs
         )
 
     def add_annotation(

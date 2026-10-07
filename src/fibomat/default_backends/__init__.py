@@ -6,8 +6,6 @@ The second one, the spotlist backend, rasterizes all shapes and creates a list o
 """
 
 
-from fibomat.backend import registry
-
 
 try:
     from fibomat.default_backends.bokeh_backend import BokehBackend, StubRasterStyle
@@ -32,11 +30,6 @@ from fibomat.default_backends.patterning_duration_calculator import (
 )
 
 
-registry.register(BokehBackend, BokehBackend.name)
-registry.register(SpotListBackend, SpotListBackend.name)
-registry.register(PatterningDurationCalculator, PatterningDurationCalculator.name)
-# registry.register(SVGBackend, SVGBackend.name)
-# registry.register(DoNothingBackend, DoNothingBackend.name)
 
 __all__ = [
     "BokehBackend",

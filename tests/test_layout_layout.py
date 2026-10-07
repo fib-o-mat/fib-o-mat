@@ -5,6 +5,7 @@ import warnings
 import pytest
 
 from fibomat.arrangements import DimGroup
+from fibomat.backend import BackendBase
 from fibomat.layout import Layout, Pattern, Site
 from fibomat.linalg import DimVector
 from fibomat.mill import Mill
@@ -24,7 +25,7 @@ def add_line(site, x0=0, x1=1):
     )
 
 
-class RecordingBackend:
+class RecordingBackend(BackendBase):
     """Backend which records its arguments and the processed sites."""
 
     def __init__(self, **kwargs):
@@ -158,18 +159,21 @@ class TestExport:
     def test_description_can_be_overwritten(self):
         assert self.layout().export(RecordingBackend, description='other').kwargs['description'] == 'other'
 
-    def test_export_by_name(self, monkeypatch):
-        from fibomat.backend import registry
-        monkeypatch.setitem(registry.backends, 'recording_test_backend', RecordingBackend)
-        assert isinstance(self.layout().export('recording_test_backend'), RecordingBackend)
+    @pytest.mark.parametrize('backend', ['spotlist', None, object, RecordingBackend(), 'bokeh'])
+    def test_backend_must_be_a_backend_class(self, backend):
+        with pytest.raises(TypeError, match='class'):
+            self.layout().export(backend)
 
-    def test_default_backends_are_available_by_name(self):
-        from fibomat.default_backends import SpotListBackend
-        assert Layout._backend_class('spotlist') is SpotListBackend
+    def test_backend_names_are_not_supported(self):
+        with pytest.raises(TypeError, match='not registered by name'):
+            self.layout().export('spotlist')
 
-    def test_unknown_backend_name(self):
-        with pytest.raises(KeyError):
-            self.layout().export('does not exist')
+    def test_other_export_methods_check_the_backend(self):
+        layout = self.layout()
+        with pytest.raises(TypeError):
+            layout.export_multi('spotlist')
+        with pytest.raises(TypeError):
+            layout.export_with_description('spotlist', {'first'})
 
     def test_export_multi(self):
         layout = self.layout()

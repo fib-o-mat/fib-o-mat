@@ -41,3 +41,11 @@ Open points which are postponed on purpose.
 - Exporting a layout works up to the rasterization, but the default backends are not reworked yet: e.g. the
   `SpotListBackend` fails in `_rasterize_and_add` (`dwell_points[:, :2] += self._site_pos`, `ndarray += Vector`), other
   backends use the old unit API (`Q_`, `.m`, ...).
+
+## Backend base class
+
+- `BackendBase.rasterized_pattern` (shape type `RasterizedPattern`) is a relict: `RasterizedPattern` is no `Shape`, so
+  a `DimShape` of it cannot exist and the method is never called.
+- `smart_fib.ElyBackendMeta` declares `arc` for the custom shape `EArc` and thereby replaces the base method of
+  `shapes.Arc`; it should declare a method with its own name (`earc`).
+- `BokehBackend.process_pattern` duplicates the dispatch of `BackendBase` (`_dispatch`).

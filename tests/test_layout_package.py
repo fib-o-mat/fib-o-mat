@@ -87,13 +87,3 @@ class TestLayout:
         )
         site += pattern()
         assert isinstance(created, Pattern)
-
-    def test_default_backends_are_registered_lazily(self):
-        # (exporting a layout with patterns is not tested here: sites and backends are not reworked yet)
-        from fibomat.default_backends import SpotListBackend
-        from fibomat.layout.layout import _registry
-        assert _registry().get('spotlist') is SpotListBackend
-
-    def test_unknown_backend_name(self):
-        with pytest.raises(KeyError):
-            Layout().export('does not exist')
