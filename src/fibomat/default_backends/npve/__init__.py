@@ -1,3 +1,4 @@
+"""Backends for NPVE (Nanopatterning and Visualization Engine): a deflection list and step and repeat files."""
 from fibomat.default_backends.npve.npve_txt import NPVETxt
 from fibomat.default_backends.npve.step_and_repeat import StepAndRepeatBackend
 from fibomat.default_backends.npve.step_and_repeat.npve_mill import NPVEMill

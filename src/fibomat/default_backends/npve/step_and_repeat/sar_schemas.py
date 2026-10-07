@@ -1,3 +1,8 @@
+"""Schemas of the sites and the file of the NPVE step and repeat format.
+
+The field names (``data_key``), their order and the default values define the XML file which NPVE reads. They must not
+be changed.
+"""
 from marshmallow import fields
 
 from fibomat.default_backends.npve.step_and_repeat.utils import (

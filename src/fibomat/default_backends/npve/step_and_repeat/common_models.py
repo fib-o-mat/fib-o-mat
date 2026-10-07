@@ -1,18 +1,34 @@
-from typing import List, Tuple, Optional
+"""Models of the shapes of the NPVE step and repeat files.
+
+The classes only hold the values which are written to the file; the file format is defined by the schemas in
+``common_schemas.py``. The numerical values (including the magic numbers) must not be changed, they define the files
+which NPVE reads.
+"""
+from __future__ import annotations
+
 import base64
 import io
+import typing as t
 
 import numpy as np
 
-from fibomat.units import U_, Q_, scale_to
-from fibomat.linalg import VectorLike
-from fibomat.raster_styles import RasterStyle, two_d, one_d, zero_d, ScanSequence
 from fibomat.default_backends.npve.step_and_repeat.npve_mill import NPVEMill
 from fibomat.default_backends.npve.step_and_repeat.outline import LineByLineOutlined
+from fibomat.linalg import VectorLike
+from fibomat.raster_styles import RasterStyle, ScanSequence, one_d, two_d, zero_d
+from fibomat.units import DimFloat, scale_to, unit
+
+
+__all__ = ['FIBShape', 'ShapeTexture', 'encode_image']
+
+
+_MICRON = unit('µm')
 
 
 class _Mill:
-    def _set_default_values_for_raster_style(self, raster_style: RasterStyle):
+    """Mill settings of a shape: pitches, scan direction, dose or number of repeats."""
+
+    def _set_default_values_for_raster_style(self, raster_style: RasterStyle) -> None:
         if isinstance(raster_style, zero_d.SingleSpot):
             self.target_du = 0.0
             self.target_dv = 0.0
@@ -24,7 +40,7 @@ class _Mill:
             self.operation_id = 999  # WTF
         elif isinstance(raster_style, one_d.Curve):
             if not raster_style.scan_sequence == ScanSequence.CONSECUTIVE:
-                raise ValueError
+                raise ValueError('Curves must have the scan sequence ScanSequence.CONSECUTIVE.')
 
             self.target_du = raster_style.pitch.m_as("µm")
             self.target_dv = raster_style.pitch.m_as("µm")
@@ -36,9 +52,9 @@ class _Mill:
 
         elif isinstance(raster_style, two_d.LineByLine):
             if not isinstance(raster_style.line_style, one_d.Curve):
-                raise TypeError
+                raise TypeError('The line style of LineByLine must be a Curve.')
             if not raster_style.line_style.scan_sequence == ScanSequence.CONSECUTIVE:
-                raise ValueError
+                raise ValueError('The line style must have the scan sequence ScanSequence.CONSECUTIVE.')
 
             self.target_du = raster_style.line_style.pitch.m_as("µm")
             self.target_dv = raster_style.line_pitch.m_as("µm")
@@ -58,14 +74,23 @@ class _Mill:
             elif raster_style.scan_sequence == ScanSequence.DOUBLE_SERPENTINE:
                 self.raster_style = 3
             else:
-                raise NotImplementedError
+                raise NotImplementedError(f'The scan sequence {raster_style.scan_sequence} is not supported by NPVE.')
         else:
             raise TypeError("Unsupported raster style.")
 
     def __init__(self, mill: NPVEMill, raster_style: RasterStyle):
+        """
+        Args:
+            mill (NPVEMill): mill
+            raster_style (RasterStyle): raster style (SingleSpot, Curve or LineByLine)
+
+        Raises:
+            TypeError: Raised if the mill is no NPVEMill or the raster style is not supported.
+            ValueError: Raised if the scan sequence of a curve is not supported.
+            NotImplementedError: Raised if the scan sequence of the lines is not supported.
+        """
         if not isinstance(mill, NPVEMill):
-            print(mill)
-            raise TypeError("Mill must be NPVEMill.")
+            raise TypeError(f"Mill must be NPVEMill, got {type(mill).__name__}.")
 
         self._set_default_values_for_raster_style(raster_style)
 
@@ -73,16 +98,12 @@ class _Mill:
         self.target_dose = 0
         self.target_time = 0
 
-        # TODO: clean this up! fehlerbehandlung und so
-        try:
-            self.num_frames = mill["repeats"]
-            # print('REPEATS')
+        if mill.repeats is not None:
+            self.num_frames = mill.repeats
             self.target_mode = 3
-        except KeyError:
-            # print('DOSE')
+        else:
             self.target_mode = 0
             if isinstance(raster_style, zero_d.SingleSpot):
-                # self.target_dose = mill['dose'].m_as('pA µs') / 200
                 self.target_dose = (
                     mill["dose"].m_as("ions") * 0.000815981757185301 / (4e4)
                 )
@@ -97,34 +118,48 @@ class _Mill:
 
         self.dwell_time = mill["dwell_time"].m_as("µs")
 
-        # 0: left to right
-        # 90: bottom to top
 
+def encode_image(data: bytes) -> str:
+    """Encode data with the base64 variant of NPVE (the alphabet is reordered).
 
-def encode_image(data):
+    Args:
+        data (bytes): data
+
+    Returns:
+        str: encoded data
+    """
     # https://stackoverflow.com/a/58917413
     std_base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     custom = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
 
-    x = base64.b64encode(data)
-    return str(x)[2:-1].translate(str(x)[2:-1].maketrans(std_base64chars, custom))
+    encoded = base64.b64encode(data).decode('ascii')
+    return encoded.translate(encoded.maketrans(std_base64chars, custom))
 
 
 class ShapeTexture:
-    def __init__(self, bitmap, rect_size: Tuple[Q_, Q_], raster_style: RasterStyle):
+    """A bitmap which is used as texture of a rectangle."""
+
+    def __init__(self, bitmap: t.Any, rect_size: t.Tuple[DimFloat[t.Any], DimFloat[t.Any]], raster_style: RasterStyle):
+        """
+        Args:
+            bitmap (PIL.Image.Image): image
+            rect_size (Tuple[DimFloat, DimFloat]): width and height of the rectangle (not used by NPVE)
+            raster_style (RasterStyle): raster style of the rectangle (LineByLine with a Curve as line style)
+
+        Raises:
+            ValueError: Raised if the raster style is no LineByLine or has an unsupported line style.
+            TypeError: Raised if the line style is no Curve.
+        """
         if isinstance(raster_style, two_d.LineByLine):
             if not isinstance(raster_style.line_style, one_d.Curve):
-                raise TypeError
+                raise TypeError('The line style of LineByLine must be a Curve.')
             if not raster_style.line_style.scan_sequence == ScanSequence.CONSECUTIVE:
-                raise ValueError
+                raise ValueError('The line style must have the scan sequence ScanSequence.CONSECUTIVE.')
 
             self.du = raster_style.line_style.pitch.m_as("µm")
             self.dv = raster_style.line_pitch.m_as("µm")
         else:
-            raise ValueError
-
-        rect_width, rect_height = rect_size
-        img_width, img_height = bitmap.size
+            raise ValueError('Textures need the raster style LineByLine.')
 
         self.scale_x = 0.002  # float(rect_width.m_as('µm') / img_width)
         self.scale_y = 0.002  # float(rect_height.m_as('µm') / img_height)
@@ -144,24 +179,40 @@ class ShapeTexture:
 
 
 class FIBShape:
+    """A shape of a step and repeat file."""
+
     def __init__(
         self,
         class_: str,
-        id: int,
+        id: int,  # pylint: disable=redefined-builtin
         rotation_center: VectorLike,
-        nodes: List[Tuple[VectorLike, int]],
+        nodes: t.List[t.Tuple[VectorLike, int]],
         mill: NPVEMill,
         raster_style: RasterStyle,
-        # outline: Optional[LineByLineOutlined] = None,
-        shape_texture: Optional = None,
-        # angle: Optional[float] = 0,
+        shape_texture: t.Optional[ShapeTexture] = None,
+        outline_thickness: t.Optional[float] = None,
+        angle: t.Optional[float] = None,
     ):
+        """
+        Args:
+            class_ (str): NPVE class of the shape, e.g. "TPolygon"
+            id (int): display id
+            rotation_center (VectorLike): rotation center (in µm)
+            nodes (List[Tuple[VectorLike, int]]): nodes (in µm) and their NPVE node types
+            mill (NPVEMill): mill
+            raster_style (RasterStyle): raster style
+            shape_texture (ShapeTexture, optional): texture
+            outline_thickness (float, optional): outline thickness (in µm) of shapes which are outlined by NPVE (rings).
+                If the raster style is :class:`LineByLineOutlined`, the outline is defined by the style.
+            angle (float, optional): angle of the shape. Default: the scan direction of the mill.
+        """
+        self.mill = _Mill(mill, raster_style)  # (checks the type of the mill)
+
         self.class_ = class_
         self.display_id = id
         self.shape_name = class_[1:]
 
-        # for now
-        self.angle = mill._scan_direction
+        self.angle = mill.scan_direction if angle is None else angle
 
         self.hole = False
 
@@ -173,42 +224,25 @@ class FIBShape:
             ]
         }
 
-        self.mill = _Mill(mill, raster_style)
-
         if isinstance(raster_style, LineByLineOutlined):
-            # TODO: make this in a clean way
-
-            # _outlined = LCBool(data_key='Outlined', default=False)
-            # _thickness = fields.Float(data_key='Thickness', default=0.5)
-            # _node_style = fields.Int(data_key='NodeStyle', default=2)
-            # _stroke_style = fields.Int(data_key='StrokeStyle', default=0)
-            # _pen_alignment = fields.Int(data_key='PenAlignment', default=0)
-            # _outline_offset = fields.Float(data_key='OutlineOffset', default=0)
-            # _direction = fields.Int(data_key='Direction', default=1)
-            #
-            # self.outline = {
-            #     "_outlined": True,
-            #     "_thickness": outline,  # factor of 0.5 !?
-            #     "_node_style": 0,
-            #     "_stroke_style": 0,
-            #     "_pen_alignment": 1,
-            #     "_outline_offset": 0,
-            #     # TODO: use ScanSequence!!
-            #     "_direction": 1 if self.class_ == "TRing" else 0,
-            # }
-
             self.outline = {
                 "_outlined": True,
-                "_thickness": scale_to(
-                    U_("µm"), raster_style._outline_offset
-                ),  # TODO: difference between thickness and outline offset? # factor of 0.5 !?
-                "_node_style": raster_style._outline_node_style.value,
+                "_thickness": scale_to(_MICRON, raster_style.outline_offset),  # TODO: difference between thickness and outline offset?
+                "_node_style": raster_style.outline_node_style.value,
                 "_stroke_style": 0,
-                "_pen_alignment": raster_style._outline_alignement.value,  # TODO alignement
+                "_pen_alignment": raster_style.outline_alignement.value,
                 "_outline_offset": 0.0,  # TODO
-                # TODO: use ScanSequence!!
-                "_direction": raster_style._outline_scan_style.value,
-                # "_direction": 1 if self.class_ == "TRing" else 0,
+                "_direction": raster_style.outline_scan_style.value,
+            }
+        elif outline_thickness:
+            self.outline = {
+                "_outlined": True,
+                "_thickness": outline_thickness,  # factor of 0.5 !?
+                "_node_style": 0,
+                "_stroke_style": 0,
+                "_pen_alignment": 1,
+                "_outline_offset": 0,
+                "_direction": 1 if self.class_ == "TRing" else 0,
             }
 
         if shape_texture:

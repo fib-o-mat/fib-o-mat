@@ -1,50 +1,91 @@
-from typing import List
+"""Models of the sites and the file of the NPVE step and repeat format (see ``sar_schemas.py`` for the format)."""
+from __future__ import annotations
 
+import typing as t
+
+from fibomat.default_backends.npve.step_and_repeat.common_models import FIBShape
 from fibomat.layout.site import Site
 from fibomat.linalg import Vector
-from fibomat.units import U_
-from fibomat.default_backends.npve.step_and_repeat.common_models import FIBShape
+from fibomat.units import unit
+
+
+__all__ = ['SaRSite', 'SaRSharedShapes', 'SaRFile']
+
+
+_MICRON = unit('µm')
 
 
 class _SaRAxis:
+    """Position of a stage axis, written with four decimals."""
+
     def __init__(self, value: float):
         self.value = f"{value:.4f}"
 
 
 class SaRSite:
+    """A site of the file: position relative to the previous site, field of view and shapes."""
+
     def __init__(self, index: int, site: Site, last_site_center: Vector):
+        """
+        Args:
+            index (int): index of the site
+            site (Site): site
+            last_site_center (Vector): center of the previous site in µm (of this site for the first site)
+
+        Raises:
+            ValueError: Raised if the field of view of the site cannot be determined.
+        """
         self.index = index
-        center = site.center.vector_as(U_("µm"))
+        center = site.center.vector_as(_MICRON)
         self.dx = center.x - last_site_center.x
         self.dy = center.y - last_site_center.y
 
         self.center = center
 
-        # print(self.dx, self.dy)
-
         self.fov = site.square_fov[0].m_as("µm")
-        #
-        # print(self.fov)
 
-        self.shapes = {"shapes_list": []}
+        self.shapes: t.Dict[str, t.List[FIBShape]] = {"shapes_list": []}
 
-    def add_fib_shape(self, shape: FIBShape):
+    def add_fib_shape(self, shape: FIBShape) -> None:
+        """Add a shape to the site.
+
+        Args:
+            shape (FIBShape): shape
+        """
         self.shapes["shapes_list"].append(shape)
 
 
 class SaRSharedShapes:
-    def __init__(self, fib_shapes: List[FIBShape]):
+    """The shapes which are shared by all sites."""
+
+    def __init__(self, fib_shapes: t.List[FIBShape]):
+        """
+        Args:
+            fib_shapes (List[FIBShape]): shapes
+        """
         self.fib_shapes = fib_shapes
 
 
 class SaRFile:
+    """A step and repeat file."""
+
     def __init__(
         self,
-        sites: List[SaRSite],
-        shared_shapes: SaRSharedShapes = None,
+        sites: t.List[SaRSite],
+        shared_shapes: t.Optional[SaRSharedShapes] = None,
         pre_image: bool = False,
         post_image: bool = False,
     ):
+        """
+        Args:
+            sites (List[SaRSite]): sites
+            shared_shapes (SaRSharedShapes, optional): shapes which are shared by all sites
+            pre_image (bool): take an image before the patterning
+            post_image (bool): take an image after the patterning
+
+        Raises:
+            ValueError: Raised if there are no sites.
+        """
         self.options = {
             "pre_image": bool(pre_image),
             "post_image": bool(post_image),
@@ -64,21 +105,5 @@ class SaRFile:
 
         if not sites:
             raise ValueError("At least one non-empty site is required.")
-
-        # mapped_site_list = []
-        #
-        # for i, site in enumerate(sites):
-        #     if not site.empty:
-        #         mapped_site_list.append(_SaRSite(0, sites[0], sites[0].center))
-        #         first_site_index = i
-        #
-        # if not mapped_site_list:
-        #     raise RuntimeError('No non-empty site in sample. There is nothing to export.')
-        #
-        # last_site_index = first_site_index
-        # for i, site in enumerate(sites[first_site_index+1:], start=first_site_index+1):
-        #     if not site.empty:
-        #         mapped_site_list.append(_SaRSite(i, site, sites[last_site_index].center))
-        #         last_site_index = i
 
         self.sites = {"sites_list": sites}

@@ -56,6 +56,9 @@ Open points which are postponed on purpose.
   (`arrangements`) still use the old unit API (`Q_`, `.m`).
 - `PatterningDurationCalculator` does not support `NPVEMill` (dose based repeats) and `npve`'s `LineByLineOutlined` anymore
   (the old code used private attributes of the npve raster style); add it when the npve backends are reworked.
-- The subclasses of `SpotListBackend` (`fei.FEIStreamFile`, `npve.NPVETxt`) still use the old unit API: they pass `Q_`
-  values as `base_dwell_time` (now a `DimFloat`) and `Q_`/`.magnitude` in their `save_impl`. The other backends (`bitmap`,
-  `svg`, `donothing`, `smart_fib`, `npve.step_and_repeat`) are not imported by `default_backends` and not reworked.
+- The backends `bitmap`, `svg`, `donothing` and `smart_fib` are not imported by `default_backends` and not reworked.
+- `StepAndRepeatBackend` patterns with `use_bitmap=True` need the bitmap backend, which is not reworked (tested with a replacement of
+  the bitmap backend only).
+- FEI stream files: `round_hfw` rounds the horizontal field width to an integer µm at the end (`np.round` wraps the whole
+  expression), although its comment says it rounds up to a quarter of the order of magnitude. This is kept, because it
+  defines the file name and the pattern size of existing files; decide if it should round up instead.

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<StepAndRepeatPatterning>
+	<Options>
+		<PreImage>false</PreImage>
+		<PostImage>false</PostImage>
+		<ShareShapes>false</ShareShapes>
+		<ApplyFocusStig>false</ApplyFocusStig>
+	</Options>
+	<StagePosition>
+		<X type="float">0.0000</X>
+		<Y type="float">0.0000</Y>
+		<Z type="float">0.0000</Z>
+		<M type="float">0.0000</M>
+		<T type="float">0.0000</T>
+		<R type="float">0.0000</R>
+	</StagePosition>
+	<SharedShapes></SharedShapes>
+	<Sites>
+		<Site>
+			<Index>0</Index>
+			<X>0.0</X>
+			<Y>0.0</Y>
+			<Relative>true</Relative>
+			<UserCoords>false</UserCoords>
+			<Delay>0.0</Delay>
+			<FOV>10.0</FOV>
+			<ShapesFile></ShapesFile>
+			<Shapes>
+				<FIBShape>
+					<Class>TFIBSpot</Class>
+					<DisplayID>10000</DisplayID>
+					<SystemID>0</SystemID>
+					<ShowID>true</ShowID>
+					<ShapeName>FIBSpot</ShapeName>
+					<Angle></Angle>
+					<EdgeIndex>-1</EdgeIndex>
+					<Hole>false</Hole>
+					<Active>true</Active>
+					<Locked>false</Locked>
+					<RotationCenter>
+						<X>1.5</X>
+						<Y>-0.5</Y>
+						<CustomPosition>false</CustomPosition>
+					</RotationCenter>
+					<Outline>
+						<Outlined>false</Outlined>
+						<Thickness>0.5</Thickness>
+						<NodeStyle>2</NodeStyle>
+						<StrokeStyle>0</StrokeStyle>
+						<PenAlignment>0</PenAlignment>
+						<OutlineOffset>0.0</OutlineOffset>
+						<Direction>1</Direction>
+					</Outline>
+					<Nodes>
+						<Node>
+							<X>1.5</X>
+							<Y>-0.5</Y>
+							<NodeType>0</NodeType>
+						</Node>
+					</Nodes>
+					<Offset>0.0</Offset>
+					<HasBitmap>false</HasBitmap>
+					<Mill>
+						<TargetDu>0.0</TargetDu>
+						<TargetDv>0.0</TargetDv>
+						<TargetDp>0.0</TargetDp>
+						<TargetDr>0.0</TargetDr>
+						<HRefresh>10.0</HRefresh>
+						<VRefresh>10.0</VRefresh>
+						<PathRefresh>10.0</PathRefresh>
+						<FullRefresh>10.0</FullRefresh>
+						<NumFrames>1</NumFrames>
+						<NumSteps>1</NumSteps>
+						<TargetDose>0.0020399543929632527</TargetDose>
+						<TargetDepth>0.0</TargetDepth>
+						<TargetTime>0.0</TargetTime>
+						<TargetMode>0</TargetMode>
+						<CustomEndpoint>true</CustomEndpoint>
+						<DwellTime>1.0</DwellTime>
+						<Angle>0.0</Angle>
+						<OperationID>999</OperationID>
+						<CustomOperation>false</CustomOperation>
+						<BeamID>0</BeamID>
+						<OptimizeBeamI>false</OptimizeBeamI>
+						<RasterStyle>0</RasterStyle>
+						<LockSpacingDuDv>true</LockSpacingDuDv>
+						<LockSpacingDpDr>true</LockSpacingDpDr>
+						<Defocus>0.0</Defocus>
+						<DeltaStigX>0.0</DeltaStigX>
+						<DeltaStigY>0.0</DeltaStigY>
+					</Mill>
+				</FIBShape>
+			</Shapes>
+		</Site>
+	</Sites>
+</StepAndRepeatPatterning>
