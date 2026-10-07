@@ -14,6 +14,7 @@ __pycache__/*
 */.ipynb_checkpoints/*
 .DS_Store
 
+
 # Project files
 .ropeproject
 .project
@@ -26,6 +27,7 @@ cmake-build-debug
 _skbuild
 tags
 *.code-workspace
+.zed
 
 # Package files
 *.egg
@@ -33,6 +35,7 @@ tags
 .installed.cfg
 *.egg-info
 pip-wheel-metadata
+build
 
 # Unittest and coverage
 htmlcov/*
@@ -65,4 +68,3 @@ bokeh-measuretool/dist/*
 bokeh-measuretool/node_modules/*
 bokeh-measuretool/package-lock.json
 bokeh-measuretool/.bokeh
-
