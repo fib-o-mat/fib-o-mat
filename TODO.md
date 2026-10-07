@@ -49,3 +49,13 @@ Open points which are postponed on purpose.
 - `smart_fib.ElyBackendMeta` declares `arc` for the custom shape `EArc` and thereby replaces the base method of
   `shapes.Arc`; it should declare a method with its own name (`earc`).
 - `BokehBackend.process_pattern` duplicates the dispatch of `BackendBase` (`_dispatch`).
+
+## Default backends
+
+- `BokehBackend(plot_reduced_lattices=True)` is only tested with a hand-made `DimLattice`; the lattice builders
+  (`arrangements`) still use the old unit API (`Q_`, `.m`).
+- `PatterningDurationCalculator` does not support `NPVEMill` (dose based repeats) and `npve`'s `LineByLineOutlined` anymore
+  (the old code used private attributes of the npve raster style); add it when the npve backends are reworked.
+- The subclasses of `SpotListBackend` (`fei.FEIStreamFile`, `npve.NPVETxt`) still use the old unit API: they pass `Q_`
+  values as `base_dwell_time` (now a `DimFloat`) and `Q_`/`.magnitude` in their `save_impl`. The other backends (`bitmap`,
+  `svg`, `donothing`, `smart_fib`, `npve.step_and_repeat`) are not imported by `default_backends` and not reworked.

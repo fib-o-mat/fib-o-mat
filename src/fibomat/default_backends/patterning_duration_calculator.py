@@ -1,412 +1,252 @@
+"""Provides the :class:`PatterningDurationCalculator`, which estimates the patterning time of a layout.
+
+The estimate does not rasterize the patterns: the number of dwell points is calculated from the size of the shape
+(length of the outline or area) and the pitches of the raster style.
+
+Example::
+
+    calculator = layout.export(PatterningDurationCalculator, current=1. * unit('nA'))
+    calculator.print()
+    calculator.total_duration  # DimFloat
+"""
+from __future__ import annotations
+
+import typing as t
 import warnings
-from typing import override
 
-import numpy as np
-from prettytable import PrettyTable
+import pint  # type: ignore
 
-from fibomat import shapes, composite_shapes
-from fibomat.backend.backendbase import BackendBase
+from fibomat import composite_shapes, shapes
+from fibomat.backend import BackendBase
 from fibomat.layout.pattern import Pattern
-from fibomat.raster_styles import one_d, two_d
-from fibomat.composite_shapes import HollowArcSpline, Ring
-from fibomat.shapes import (
-    ArcSpline,
-    Ellipse,
-    Shape,
-)
 from fibomat.layout.site import Site
-from fibomat.units import Q_
+from fibomat.raster_styles import one_d, two_d, zero_d
+from fibomat.units import DimFloat, ureg
+
+
+__all__ = ['PatterningDurationCalculator']
+
+
+_CURRENT_DIMENSIONALITY = ureg.get_dimensionality('[current]')
+
+
+def _format_time(duration: pint.Quantity) -> str:
+    """Format a duration in seconds, minutes or hours."""
+    seconds = duration.m_as('s')
+    if seconds < 60.:
+        shown = duration.to('s')
+    elif seconds < 3600.:
+        shown = duration.to('min')
+    else:
+        shown = duration.to('hour')
+    return f'{shown:~P.2f}'
 
 
 class PatterningDurationCalculator(BackendBase):
-    name = "PatterningDurationCalculator"
+    """Estimates the patterning duration of each pattern, site and of the whole layout.
 
-    def __init__(self, current: Q_, *args, **kwargs):
+    Supported are spots (:class:`~fibomat.raster_styles.zero_d.SingleSpot`), curves
+    (:class:`~fibomat.raster_styles.one_d.Curve`) and areas filled with lines
+    (:class:`~fibomat.raster_styles.two_d.LineByLine` with a :class:`~fibomat.raster_styles.one_d.Curve` as line
+    style). The mill must be a :class:`~fibomat.mill.Mill` (or provide the settings ``dwell_time`` and ``repeats``).
+    The duration is ``number of dwell points * repeats * dwell time``.
+    """
+
+    def __init__(self, current: DimFloat[t.Any], description: t.Optional[str] = None):
+        """
+        Args:
+            current (DimFloat): beam current, e.g. ``1. * unit('nA')``. It is only shown in the summary.
+            description (str, optional): description
+
+        Raises:
+            TypeError: Raised if current is not a dimensioned value.
+            ValueError: Raised if current is not a positive current.
+        """
+        super().__init__(description)
+
+        if not isinstance(current, DimFloat):
+            raise TypeError('current must be a dimensioned value like 1. * unit("nA").')
+        if current.quantity.dimensionality != _CURRENT_DIMENSIONALITY or not current.magnitude > 0.:
+            raise ValueError('current must be a positive current.')
         self._current = current
-        super().__init__(*args, **kwargs)
 
-        self.durations = []
+        self.durations: t.List[t.Dict[str, t.Any]] = []
+        """Durations of the sites: dicts with the keys ``name`` and ``patterns`` (dicts with ``name`` and
+        ``duration``, a :class:`~fibomat.units.DimFloat`)."""
         self._i_site = 0
         self._i_pattern = 0
 
-    def _add_pattern(self, ptn, duration):
-        self.durations[-1]["patterns"].append(
-            {
-                "name": f"{self._i_pattern} {ptn.dim_shape.shape.__class__.__name__}",
-                "duration": duration,
-            }
-        )
+    @property
+    def current(self) -> DimFloat[t.Any]:
+        """Beam current.
 
-    def print(self):
-        def _format_time(t):
-            if t < Q_("60 s"):
-                t.ito("s")
-            elif t < Q_("60 min"):
-                t.ito("min")
-            else:
-                t.ito("hours")
-            return f"{t:~P.2f}"
+        Access:
+            get
+        """
+        return self._current
 
-        def _percent_to_star(p):
-            n = 20
-            n_stars = int(p * n)
-            return "*" * n_stars + " " * (n - n_stars)
+    @property
+    def total_duration(self) -> DimFloat[t.Any]:
+        """Estimated duration of the whole layout.
+
+        Access:
+            get
+        """
+        total = 0. * ureg.second
+        for site in self.durations:
+            for pattern in site['patterns']:
+                total = total + pattern['duration'].quantity
+        return DimFloat(total.to('s'))
+
+    def _site_duration(self, site: t.Dict[str, t.Any]) -> pint.Quantity:
+        total = 0. * ureg.second
+        for pattern in site['patterns']:
+            total = total + pattern['duration'].quantity
+        return total
+
+    def table(self) -> str:
+        """A table with the durations of all sites.
+
+        Returns:
+            str
+        """
+        def percent_to_stars(fraction: float) -> str:
+            n_stars = int(fraction * 20)
+            return '*' * n_stars + ' ' * (20 - n_stars)
+
+        try:
+            from prettytable import PrettyTable  # pylint: disable=import-outside-toplevel
+        except ModuleNotFoundError as error:
+            raise ImportError(
+                'The summary table needs prettytable; install fibomat with the "exporting" extra.'
+            ) from error
 
         table = PrettyTable()
-        table.field_names = [
-            "Site",
-            "#Patterns",
-            "Duration",
-            "Cum. duration",
-            "Rel. duration",
-        ]
-        table.align["Site"] = "l"
-        table.align["#Patterns"] = "r"
-        table.align["Duration"] = "r"
-        table.align["Cum. duration"] = "r"
-        table.align["Rel. duration"] = "r"
+        table.field_names = ['Site', '#Patterns', 'Duration', 'Cum. duration', 'Rel. duration']
+        for field in table.field_names:
+            table.align[field] = 'l' if field == 'Site' else 'r'
 
-        total_duration = Q_("0 s")
+        durations = [self._site_duration(site) for site in self.durations]
+        total = sum((duration.m_as('s') for duration in durations), 0.)
 
-        durations_per_site = []
+        cumulative = 0. * ureg.second
+        for site, duration in zip(self.durations, durations):
+            cumulative = cumulative + duration
+            fraction = duration.m_as('s') / total if total > 0. else 0.
+            table.add_row([
+                site['name'], len(site['patterns']), _format_time(duration), _format_time(cumulative),
+                f'>|{percent_to_stars(fraction)}|< ({fraction:.3f})'
+            ])
 
-        for site in self.durations:
-            duration = sum([pattern["duration"] for pattern in site["patterns"]])
-            if duration == 0:
-                duration = Q_("0 s")
-            durations_per_site.append(duration)
-            total_duration += duration
-
-        cum_duration = Q_("0 s")
-        for site, duration in zip(self.durations, durations_per_site):
-            cum_duration += duration
-            rel_duration = float(duration / total_duration)
-            table.add_row(
-                [
-                    site["name"],
-                    len(site["patterns"]),
-                    _format_time(duration),
-                    _format_time(cum_duration),
-                    f">|{_percent_to_star(rel_duration)}|< ({rel_duration:.3f})",
-                ]
-            )
-
-        print(table)
-        print()
-        print(
-            f"Total duration: {_format_time(total_duration)} @ {self._current.to('pA'):~P.2f}"
+        return (
+            f'{table}\n\n'
+            f'Total duration: {_format_time(self.total_duration.quantity)} @ {self._current.quantity.to("pA"):~P.2f}'
         )
 
+    def print(self) -> None:
+        """Print :meth:`table`."""
+        print(self.table())
+
     def process_site(self, new_site: Site) -> None:
-        # self.dwell_times_per_site.append(0.)
+        name = f'Site {self._i_site}'
+        if new_site.description:
+            name += f' {new_site.description}'
 
-        name = f"Site {self._i_site}"
-
-        if descr := new_site.description:
-            name += f" {descr}"
-
-        self.durations.append({"name": name, "patterns": []})
+        self.durations.append({'name': name, 'patterns': []})
 
         self._i_site += 1
         self._i_pattern = 0
 
-        return super().process_site(new_site)
+        super().process_site(new_site)
 
-    def _process_pattern(self, ptn: Pattern) -> None:
-        from fibomat.curve_tools.offset import inflate, offset
-        from fibomat.default_backends.npve import LineByLineOutlined
-        from fibomat.default_backends.npve.step_and_repeat.outline import (
-            OutlineAlignement,
-        )
+    @staticmethod
+    def _curve_length(shape: t.Any) -> pint.Quantity:
+        """Length of the outline of a shape (in the unit of the shape's coordinates)."""
+        if hasattr(shape, 'boundary_length'):
+            return float(shape.boundary_length)
+        return float(shape.to_arc_spline().length)
 
-        if isinstance(ptn.raster_style, one_d.Curve):
-            area = ptn.dim_shape.shape.boundary_length * ptn.dim_shape.unit
-            pitch = ptn.raster_style.pitch
+    @staticmethod
+    def _area(shape: t.Any) -> float:
+        """Area of a closed shape (in the unit of the shape's coordinates)."""
+        if hasattr(shape, 'area'):
+            return abs(float(shape.area))
+        return abs(float(shape.to_arc_spline().area))
 
-        elif isinstance(ptn.raster_style, LineByLineOutlined) and isinstance(
-            ptn.raster_style.line_style, one_d.Curve
-        ):
-            if ptn.raster_style._outline_alignement == OutlineAlignement.OUTSET:
-                s = ptn.dim_shape.shape
-                area = (
-                    sum(
-                        [
-                            c.area
-                            for c in inflate(
-                                s.to_arc_spline(),
-                                ptn.raster_style._outline_offset.m_as(
-                                    ptn.dim_shape.unit
-                                ),
-                                n_steps=1,
-                            )
-                        ]
-                    )
-                    - s.area
-                ) * ptn.dim_shape.unit**2
+    def _estimate(self, ptn: Pattern) -> pint.Quantity:
+        """Estimate the duration of a pattern.
 
-                pitch = ptn.raster_style.line_pitch * ptn.raster_style.line_style.pitch
+        Raises:
+            NotImplementedError: Raised for raster styles which are not supported.
+            TypeError: Raised if the mill does not have a dwell time and repeats.
+        """
+        style = ptn.raster_style
+        shape, length_unit = ptn.dim_shape.shape, ptn.dim_shape.unit
 
-            else:
-                raise NotImplementedError
-        elif isinstance(ptn.raster_style, two_d.LineByLine) and isinstance(
-            ptn.raster_style.line_style, one_d.Curve
-        ):
-            area = ptn.dim_shape.shape.area * ptn.dim_shape.unit**2
-            pitch = ptn.raster_style.line_pitch * ptn.raster_style.line_style.pitch
-        else:
-            raise NotImplementedError
-
-        mill = ptn.mill
-
-        dwell_time = mill["dwell_time"]
         try:
-            repeats = mill["repeats"]
-        except KeyError:
-            # print('dose', mill['dose'], mill._kwargs)
-            repeats = mill["dose"] * pitch / (dwell_time * self._current)
-
-        repeats = repeats.to_base_units()
+            dwell_time = ptn.mill['dwell_time']
+            repeats = ptn.mill['repeats']
+        except KeyError as error:
+            raise TypeError('The mill must provide the settings dwell_time and repeats.') from error
+        if not isinstance(dwell_time, DimFloat):
+            raise TypeError('The dwell time of the mill must be a constant (a Mill).')
 
         if repeats < 1:
-            warnings.warn(
-                f"Got repeats < 1 for pattern: {ptn} ({ptn.dim_shape, ptn.mill, ptn.raster_style})"
-            )
+            warnings.warn(f'Got repeats < 1 for pattern {ptn!r}.', stacklevel=3)
 
-        time = area / pitch * repeats * dwell_time
+        if isinstance(style, zero_d.SingleSpot):
+            n_points = 1.
+        elif isinstance(style, one_d.Curve):
+            n_points = (self._curve_length(shape) * length_unit / style.pitch.quantity).m_as('')
+        elif isinstance(style, two_d.LineByLine) and isinstance(style.line_style, one_d.Curve):
+            area = self._area(shape) * length_unit ** 2
+            n_points = (area / (style.line_pitch.quantity * style.line_style.pitch.quantity)).m_as('')
+        else:
+            raise NotImplementedError(f'The duration of the raster style {style!r} cannot be estimated.')
 
-        # print(
-        #     ptn.dim_shape.shape.__class__.__name__,
-        #     time,
-        #     repeats,
-        #     area.units,
-        #     pitch.units,
-        # )
+        return n_points * repeats * dwell_time.quantity
 
-        self._add_pattern(ptn, time)
+    def _process_pattern(self, ptn: Pattern) -> None:
+        duration = DimFloat(self._estimate(ptn).to('s'))
 
-    @override
-    def rect(self, ptn: Pattern[shapes.Rect]) -> None:
+        self.durations[-1]['patterns'].append({
+            'name': f'{self._i_pattern} {type(ptn.dim_shape.shape).__name__}',
+            'duration': duration,
+        })
+        self._i_pattern += 1
+
+    def spot(self, ptn: Pattern[shapes.Spot]) -> None:
         self._process_pattern(ptn)
 
-    @override
-    def circle(self, ptn: Pattern[shapes.Circle]) -> None:
+    def line(self, ptn: Pattern[shapes.Line]) -> None:
         self._process_pattern(ptn)
 
-    @override
-    def ellipse(self, ptn: Pattern[shapes.Ellipse]) -> None:
+    def polyline(self, ptn: Pattern[shapes.Polyline]) -> None:
         self._process_pattern(ptn)
 
-    @override
-    def polygon(self, ptn: Pattern[shapes.Polygon]) -> None:
+    def arc(self, ptn: Pattern[shapes.Arc]) -> None:
         self._process_pattern(ptn)
 
-    @override
     def arc_spline(self, ptn: Pattern[shapes.ArcSpline]) -> None:
         self._process_pattern(ptn)
 
-    @override
+    def parametric_curve(self, ptn: Pattern[shapes.ParametricCurve]) -> None:
+        self._process_pattern(ptn)
+
+    def polygon(self, ptn: Pattern[shapes.Polygon]) -> None:
+        self._process_pattern(ptn)
+
+    def rect(self, ptn: Pattern[shapes.Rect]) -> None:
+        self._process_pattern(ptn)
+
+    def circle(self, ptn: Pattern[shapes.Circle]) -> None:
+        self._process_pattern(ptn)
+
+    def ellipse(self, ptn: Pattern[shapes.Ellipse]) -> None:
+        self._process_pattern(ptn)
+
+    def ring(self, ptn: Pattern[composite_shapes.Ring]) -> None:
+        self._process_pattern(ptn)
+
     def hollow_arc_spline(self, ptn: Pattern[composite_shapes.HollowArcSpline]) -> None:
         self._process_pattern(ptn)
-
-    @override
-    def line(self, ptn):
-        self._process_pattern(ptn)
-
-    # def polygon(self, ptn) -> None:
-    #     # print('warning: polygon not counted')
-    #     # https://stackoverflow.com/a/49129646
-    #     def polygon_area(x, y):
-    #         correction = x[-1] * y[0] - y[-1] * x[0]
-    #         main_area = np.dot(x[:-1], y[1:]) - np.dot(y[:-1], x[1:])
-    #         return 0.5 * np.abs(main_area + correction)
-
-    #     if isinstance(ptn.raster_style, two_d.LineByLine) and isinstance(
-    #         ptn.raster_style.line_style, one_d.Curve
-    #     ):
-    #         mill = ptn.mill
-    #         pitch = ptn.raster_style.line_pitch * ptn.raster_style.line_style.pitch
-
-    #         dwell_time = mill["dwell_time"]
-    #         try:
-    #             repeats = mill["repeats"]
-    #         except KeyError:
-    #             # print('dose', mill['dose'], mill._kwargs)
-    #             repeats = mill["dose"] * pitch / (dwell_time * self._current)
-    #         area = polygon_area(
-    #             ptn.dim_shape.shape.points[:, 0], ptn.dim_shape.shape.points[:, 1]
-    #         )
-    #         time = area * ptn.dim_shape.unit**2 / pitch * repeats * dwell_time
-
-    #         self._add_pattern(ptn, time)
-    #     else:
-    #         raise NotImplementedError
-
-    # def arc_spline(self, ptn) -> None:
-    #     """
-    #     Adds pattern with `Line` as shape to the backend.
-
-    #     Args:
-    #         ptn (Pattern): pattern with `Line` as shape
-
-    #     Returns:
-    #         None
-    #     """
-    #     if isinstance(ptn.raster_style, two_d.LineByLine) and isinstance(
-    #         ptn.raster_style.line_style, one_d.Curve
-    #     ):
-    #         # mill = ptn.mill
-    #         # pitch = ptn.raster_style.pitch
-    #         # dwell_time = mill["dwell_time"]
-    #         # try:
-    #         #     repeats = mill["repeats"]
-    #         # except KeyError:
-    #         #     # print('dose', mill['dose'], mill._kwargs)
-    #         #     repeats = mill["dose"] * pitch / (dwell_time * self._current)
-
-    #         # time = (
-    #         #     ptn.dim_shape.shape.length
-    #         #     * ptn.dim_shape.unit
-    #         #     / ptn.raster_style.pitch
-    #         #     * repeats
-    #         #     * dwell_time
-    #         # )
-    #         # self._add_pattern(ptn, time)
-    #         area = abs(ptn.dim_shape.shape.area)
-    #         return self._add_with_area(area, ptn)
-    #     else:
-    #         print(ptn.raster_style)
-    #         raise NotImplementedError
-
-    # def _process_as_arc_spline_pattern(self, ptn):
-    #     arc_spline = ptn.dim_shape.shape.to_arc_spline()
-
-    #     return self.arc_spline(
-    #         Pattern(
-    #             dim_shape=arc_spline * ptn.dim_shape.unit,
-    #             raster_style=ptn.raster_style,
-    #             mill=ptn.mill,
-    #         )
-    #     )
-
-    # def line(self, ptn: Pattern) -> None:
-    #     """
-    #     Adds pattern with `Line` as shape to the backend.
-
-    #     Args:
-    #         ptn (Pattern): pattern with `Line` as shape
-
-    #     Returns:
-    #         None
-    #     """
-    #     return self._process_as_arc_spline_pattern(ptn)
-
-    # def rect(self, ptn: Pattern) -> None:
-    #     if isinstance(ptn.raster_style, two_d.LineByLine) and isinstance(
-    #         ptn.raster_style.line_style, one_d.Curve
-    #     ):
-    #         mill = ptn.mill
-    #         pitch = ptn.raster_style.line_pitch * ptn.raster_style.line_style.pitch
-
-    #         dwell_time = mill["dwell_time"]
-    #         try:
-    #             repeats = mill["repeats"]
-    #         except KeyError:
-    #             # print('dose', mill['dose'], mill._kwargs)
-    #             repeats = mill["dose"] * pitch / (dwell_time * self._current)
-
-    #         time = (
-    #             ptn.dim_shape.shape.width
-    #             * ptn.dim_shape.shape.height
-    #             * ptn.dim_shape.unit**2
-    #             / pitch
-    #             * repeats
-    #             * dwell_time
-    #         )
-
-    #         self._add_pattern(ptn, time)
-    #     else:
-    #         raise NotImplementedError
-
-    # def polyline(self, ptn: Pattern) -> None:
-    #     return self._process_as_arc_spline_pattern(ptn)
-
-    # def circle(self, ptn: Pattern) -> None:
-    #     ellipse = Ellipse(
-    #         ptn.dim_shape.shape.r,
-    #         ptn.dim_shape.shape.r,
-    #         center=ptn.dim_shape.shape.center,
-    #     )
-
-    #     return self.ellipse(
-    #         Pattern(
-    #             dim_shape=ellipse * ptn.dim_shape.unit,
-    #             raster_style=ptn.raster_style,
-    #             mill=ptn.mill,
-    #         )
-    #     )
-
-    # def ellipse(self, ptn: Pattern) -> None:
-    #     if isinstance(ptn.raster_style, two_d.LineByLine) and isinstance(
-    #         ptn.raster_style.line_style, one_d.Curve
-    #     ):
-    #         mill = ptn.mill
-    #         pitch = ptn.raster_style.line_pitch * ptn.raster_style.line_style.pitch
-
-    #         dwell_time = mill["dwell_time"]
-    #         try:
-    #             repeats = mill["repeats"]
-    #         except KeyError:
-    #             # print('dose', mill['dose'], mill._kwargs)
-    #             repeats = mill["dose"] * pitch / (dwell_time * self._current)
-
-    #         area = np.pi * ptn.dim_shape.shape.a * ptn.dim_shape.shape.b
-
-    #         time = area * ptn.dim_shape.unit**2 / pitch * repeats * dwell_time
-
-    #         self._add_pattern(ptn, time)
-    #     else:
-    #         raise NotImplementedError
-
-    # def ring(self, ptn: Pattern[Ring]):
-    #     if isinstance(ptn.raster_style, two_d.LineByLine) and isinstance(
-    #         ptn.raster_style.line_style, one_d.Curve
-    #     ):
-    #         mill = ptn.mill
-    #         pitch = ptn.raster_style.line_pitch * ptn.raster_style.line_style.pitch
-
-    #         dwell_time = mill["dwell_time"]
-    #         try:
-    #             repeats = mill["repeats"]
-    #         except KeyError:
-    #             # print('dose', mill['dose'], mill._kwargs)
-    #             repeats = mill["dose"] * pitch / (dwell_time * self._current)
-
-    #         area = np.pi * (
-    #             ptn.dim_shape.shape._r_outer**2
-    #             - (ptn.dim_shape.shape._r_outer - ptn.dim_shape.shape._thickness) ** 2
-    #         )
-
-    #         time = area * ptn.dim_shape.unit**2 / pitch * repeats * dwell_time
-
-    #         self._add_pattern(ptn, time)
-    #     else:
-    #         raise NotImplementedError
-
-    # def spot(self, ptn: Pattern) -> None:
-    #     mill = ptn.mill
-
-    #     try:
-    #         dose = mill["dose"]
-    #     except KeyError:
-    #         dose = mill["dwell_time"] * mill["repeats"] * self._current
-    #         # print('dose', mill['dose'], mill._kwargs)
-    #     time = dose / self._current
-    #     self._add_pattern(ptn, time)
-
-    # def hollow_arc_spline(self, ptn: Pattern[HollowArcSpline]) -> None:
-    #     if isinstance(ptn.raster_style, two_d.LineByLine) and isinstance(
-    #         ptn.raster_style.line_style, one_d.Curve
-    #     ):
-    #         pass
-    #     else:
-    #         raise NotImplementedError

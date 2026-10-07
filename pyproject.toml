@@ -55,7 +55,7 @@ beam_simulation = "fibomat.beam_simulation:run"
 
 [project.optional-dependencies]
 exporting = [
-    "bokeh>=3.1.1",
+    "bokeh>=3.8,<4",
     "svgwrite",
     "marshmallow",
     "prettytable",
