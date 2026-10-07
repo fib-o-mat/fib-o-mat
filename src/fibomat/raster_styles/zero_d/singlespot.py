@@ -1,20 +1,34 @@
-from typing import Tuple, Sequence
+"""Provide the :class:`SingleSpot` raster style.
+
+Example:
+    >>> from fibomat.raster_styles.zero_d import SingleSpot
+    >>> from fibomat.mill import Mill
+    >>> from fibomat.shapes import Spot
+    >>> from fibomat.units import unit
+    >>> pattern = SingleSpot().rasterize(Spot((1, 2)) * unit('µm'), Mill(2. * unit('ms'), 2), unit('nm'), unit('µs'))
+    >>> pattern.dwell_points.round(6).tolist()
+    [[1000.0, 2000.0, 2000.0], [1000.0, 2000.0, 2000.0]]
+"""
+from __future__ import annotations
 
 import numpy as np
 
-from fibomat.rasterizedpattern import RasterizedPattern
-from fibomat.raster_styles.rasterstyle import RasterStyle
-from fibomat.units import LengthUnit, TimeUnit, scale_to, scale_factor
-from fibomat.shapes import Spot, DimShape
 from fibomat.mill import Mill
+from fibomat.raster_styles._helpers import apply_repeats, dwell_time_in, position_scale
+from fibomat.raster_styles.rasterstyle import RasterStyle
+from fibomat.rasterizedpattern import RasterizedPattern
+from fibomat.shapes import DimShape, Spot
+from fibomat.units import LengthUnit, TimeUnit
+
+
+__all__ = ['SingleSpot']
 
 
 class SingleSpot(RasterStyle):
-    def __init__(self):
-        super().__init__()
+    """Raster style for :class:`~fibomat.shapes.spot.Spot` shapes. The spot is exposed `repeats` times."""
 
     def __repr__(self) -> str:
-        return '{}()'.format(self.__class__.__name__)
+        return f'{self.__class__.__name__}()'
 
     @property
     def dimension(self) -> int:
@@ -27,18 +41,26 @@ class SingleSpot(RasterStyle):
         out_length_unit: LengthUnit,
         out_time_unit: TimeUnit
     ) -> RasterizedPattern:
+        """Rasterize a spot.
 
-        # dim_shape = DimShape(dim_shape)
+        Args:
+            dim_shape (DimShape): spot with length unit
+            mill (Mill): mill
+            out_length_unit (LengthUnit): length unit of the returned pattern
+            out_time_unit (TimeUnit): time unit of the returned pattern
 
+        Returns:
+            RasterizedPattern: `mill.repeats` times the same dwell point
+
+        Raises:
+            TypeError: Raised if the shape is no spot or the mill is no :class:`~fibomat.mill.Mill`.
+        """
         if not isinstance(dim_shape.shape, Spot):
-            raise RuntimeError('Only `shapes.Spot`s can have `SpotStyle` as raster style.')
+            raise TypeError('Only `shapes.Spot`s can have `SingleSpot` as raster style.')
 
-        spot = dim_shape.shape
-        dwell_point = [
-            *(spot.position * scale_factor(out_length_unit, dim_shape.unit)),
-            scale_to(out_time_unit, mill.dwell_time(spot.position))
-        ]
-        print(dwell_point)
+        scale = position_scale(dim_shape.unit, out_length_unit)
+        x, y = np.asarray(dim_shape.shape.position, dtype=float) * scale
 
-        # return RasterizedPoints(np.array([dwell_point]*mill.repeats), False)
-        return RasterizedPattern(np.array([dwell_point]*mill.repeats), out_length_unit, out_time_unit)
+        dwell_point = np.array([[x, y, dwell_time_in(mill, out_time_unit)]])
+
+        return RasterizedPattern(apply_repeats(dwell_point, mill.repeats), out_length_unit, out_time_unit)

@@ -1,0 +1,37 @@
+# TODO
+
+Open points which are postponed on purpose.
+
+## `mill.SILMill` and `mill.DDDMill`
+
+- The design is undecided: a dwell time which depends on the position (`DDDMill`, `SILMill`) needs a clear contract
+  (in which length unit are the positions handed to the dwell time function? vectorized or per point? which return
+  type?). `Mill` has a constant dwell time and does not derive from `DDDMill` anymore.
+- Both classes are only moved into their own modules (`mill/ddd_mill.py`, `mill/sil_mill.py`), they are *not* reworked
+  and not tested: `SILMill` still checks its arguments with `isinstance(..., Q_)` (`Q_` is a deprecated function and
+  no class anymore, so `SILMill(...)` raises a `TypeError`), uses the stateful `set_unit` and has unitless parameters
+  (`min_dwell_time`).
+
+## `raster_styles.two_d.Spiral`
+
+- Depends on `SILMill`/`DDDMill` (see above): it evaluates `mill.dwell_time(point)` and calls `mill.set_unit`.
+- Re-implements the Archimedean spiral and the arc length parametrization (the helper functions
+  `rasterize_sympy_curve` and `rasterize_spiral_lambertw` are dead code); `curve_tools.fill_with_spiral` returns an
+  exact `ParametricCurve` which could be rasterized with `curve_tools.rasterize` instead.
+- Only the minimum needed to run with the new units is planned for now.
+
+## Raster styles and `Mill.dwell_time`
+
+- `Mill.dwell_time` is the constant dwell time (`DimFloat`), not a function of the position anymore. The raster styles
+  (`one_d.Curve`, `zero_d.SingleSpot`, `zero_d.PreRasterized`, `scansequence._apply_scan_sequence`, ...) still call
+  `mill.dwell_time(point)` and must be adapted in the raster style step.
+- `mill.beam` does not exist (`ContourParallel`, `optimize`); the beam is not a part of the mills yet.
+
+## Think about the rasterize pipeline more carefully
+
+## Raster styles: open questions
+
+- `Spiral` (see above) ignores `scan_sequence` and `mill.repeats`, returns `None` from its `direction` property and
+  has no argument checks.
+- Floating point noise: `scale_factor(unit('nm'), unit('µm'))` is `999.9999999999999` (pint converts through the
+  prefixes), so converted positions are not exact (`249.99999999999997` instead of `250`).

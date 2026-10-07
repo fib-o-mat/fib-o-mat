@@ -54,7 +54,6 @@ Documentation = "https://fib-o-mat.readthedocs.io/en/latest/"
 beam_simulation = "fibomat.beam_simulation:run"
 
 [project.optional-dependencies]
-# TODO numba
 exporting = [
     "bokeh>=3.1.1",
     "svgwrite",
@@ -65,6 +64,8 @@ exporting = [
     "pillow",
 ]
 io = ["svgelements", "ezdxf"]
+# features which are not stable or not fully reworked yet (e.g. `fibomat.optimize`, `ContourParallel`)
+experimental = ["numba"]
 gui = ["pyqt5", "vispy"]
 docs = [
     "setuptools",

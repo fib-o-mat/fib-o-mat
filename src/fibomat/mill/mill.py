@@ -1,167 +1,81 @@
-"""Provide the :class:`Mill` class."""
-from typing import Optional
-import types
-from fibomat.units import QuantityType, has_time_dim, has_length_dim, Q_
-from fibomat.units import Q_, scale_to
-from fibomat.mill.ionbeam import IonBeam
-import pint
-import numpy as np
+"""Provide the :class:`Mill` class.
 
-class MillBase:
-    def __init__(self, **kwargs):
-        self._kwargs = kwargs
+Example:
+    >>> from fibomat.units import unit
+    >>> mill = Mill(2. * unit('ms'), repeats=3)
+    >>> mill.repeats
+    3
+    >>> mill.dwell_time.m_as('µs')
+    2000.0
+"""
+from __future__ import annotations
 
-    def __repr__(self) -> str:
-        return ('{}(' + ', '.join([key + '={}' for key in self._kwargs.keys()]) + ')').format(
-            self.__class__.__name__, *self._kwargs.values()
-        )
+import math
+import operator
+import typing as t
 
-    # def __getattr__(self, item):
-    #     return self.__getitem__(item)
-    #
-    # def __setattr__(self, key, value):
-    #     if not key.startswith('_'):
-    #         raise TypeError(
-    #             "'MillBase' object does not support item assignment (if you are a developer, use variables with "
-    #             " _ [underscore] as first character. Then, this check is bypassed)"
-    #         )
-    #     super().__setattr__(key, value)
+from fibomat.mill.mill_base import MillBase
+from fibomat.units import DimFloat, TimeDimension, has_time_dim
 
-    # def __getattribute__(self, item: str):
-    #     print('__getattribute__', item)
-    #     if not item.startswith('_') and item not in self._kwargs:
-    #         raise AttributeError
-    #     return object.__getattribute__(self, item)
 
-        #
-    # def __setattr__(self, key, value):
-    #     raise NotImplementedError
+__all__ = ['Mill']
 
-    def __getitem__(self, item: str):
-        try:
-            value = self._kwargs[item]
 
-            if value is None:
-                raise KeyError('value is none')
+class Mill(MillBase):
+    """Constant dwell time per spot and number of repeats of a pattern. It is used for all shapes.
 
-            return value
-        except KeyError as key_error:
-            raise KeyError(
-                f'Mill object does not have property "{item}". '
-                'Maybe you need a SpecialMill with custom properties for the used backend?'
-            ) # from key_error
-
-class DDDMill(MillBase):
-    """The `DDDMill` class is used to specify the dwell_time per spot and the number of repeats for a pattern.
-
-    Optionally, the class can hold an object describing the shape of the ion beam which is needed if any kind of
-    optimization is done.
+    The settings are available as properties and as items (``mill['dwell_time']``, ``mill['repeats']``).
     """
-    def __init__(self, dwell_time: types.FunctionType, repeats: int):
 
-            try:
-                if dwell_time.__annotations__["return"] is not pint.registry.Quantity:
-                    raise TypeError("dwell_time must give quantities")
-            except:  # User should be free not to typehint
-                print("No Typehint for dwell_time, please check if function returns quantites.")
-            if not isinstance(repeats, int):
-                raise TypeError('repats must be an int')
-
-            if repeats < 1:
-                raise ValueError('repeats must be at least 1.')
-
-            super().__init__(dwell_time=dwell_time, repeats=repeats)
-    @property
-    def dwell_time(self) -> types.FunctionType:
-        return self['dwell_time']
-
-    @property
-    def repeats(self) -> int:
-        return self['repeats']
-
-class Mill(DDDMill):
-    """The `Mill` class is used to specify a constant dwell_time per spot and the number of repats for a pattern. It should be used for 2D-Shapes.
-
-    Optionally, the class can hold an object describing the shape of the ion beam which is needed if any kind of
-    optimization is done.
-    """
-    def __init__(self, dwell_time: QuantityType, repeats: int):
+    def __init__(self, dwell_time: DimFloat[TimeDimension], repeats: int):
         """
         Args:
-            dwell_time (QuantityType): dwell time per spot
-            repeats (int): number of repeats
-        """
+            dwell_time (DimFloat[TimeDimension]): dwell time per spot (greater than 0), e.g. ``2. * unit('ms')``.
+            repeats (int): number of repeats (at least 1)
 
-        if not isinstance(dwell_time, Q_):
-            raise TypeError('dwell_time must be a quantity.')
+        Raises:
+            TypeError: Raised if dwell_time is not a dimensioned value (e.g. a float or a plain pint quantity) or
+                repeats is not an integer.
+            ValueError: Raised if dwell_time has not the dimension [time] or is not positive and finite, or if repeats
+                is less than 1.
+        """
+        if not isinstance(dwell_time, DimFloat):
+            raise TypeError(
+                f'dwell_time must be a dimensioned value like 2. * unit("ms"), got {type(dwell_time).__name__}.'
+            )
 
         if not has_time_dim(dwell_time):
             raise ValueError('dwell_time must have dimension [time].')
 
-        if not isinstance(repeats, int):
-            raise TypeError('repats must be an int')
+        if not math.isfinite(dwell_time.magnitude) or dwell_time.magnitude <= 0.:
+            raise ValueError(f'dwell_time must be positive and finite, got {dwell_time!r}.')
+
+        if isinstance(repeats, bool):
+            raise TypeError('repeats must be an int.')
+        try:
+            repeats = operator.index(repeats)
+        except TypeError:
+            raise TypeError(f'repeats must be an int, got {type(repeats).__name__}.') from None
 
         if repeats < 1:
             raise ValueError('repeats must be at least 1.')
-        
-        def dwell_func(point: np.ndarray) -> QuantityType:
-            return dwell_time
 
-        super().__init__(dwell_time=dwell_func, repeats=repeats)
+        super().__init__(dwell_time=dwell_time, repeats=repeats)
 
     @property
-    def dwell_time(self) -> QuantityType:
+    def dwell_time(self) -> DimFloat[TimeDimension]:
+        """Dwell time per spot.
+
+        Access:
+            get
+        """
         return self['dwell_time']
 
     @property
     def repeats(self) -> int:
+        """Number of repeats.
+
+        Access:
+            get
+        """
         return self['repeats']
-
-
-class SILMill(DDDMill):
-    def __init__(self, max_dwell_time: QuantityType, radius_sil: QuantityType, radius: QuantityType, repeats: int, min_dwell_time=1):
-        if not isinstance(repeats, int):
-            raise TypeError('repeats must be an int')
-        if repeats < 1:
-            raise ValueError('repeats must be at least 1.')
-        if not isinstance(radius_sil, Q_) or not isinstance(radius, Q_):
-            raise TypeError('both radii must be a quantity.')
-
-        if not has_length_dim(radius_sil) or not has_length_dim(radius):
-            raise ValueError('both radii must have dimension [length].')
-
-        # Store as quantities (with units if possible)
-        self._radius_sil = radius_sil.magnitude
-        self._radius = scale_to(radius_sil, radius)
-
-        self._radii_unit = radius_sil.units  # will be set by set_unit
-
-        def dwell_func(point: np.ndarray) -> QuantityType:
-            x, y = point[0], point[1]
-            dist_sq = x * x + y * y
-            dist = np.sqrt(dist_sq)
-            # Use the already scaled radii
-            radius_sil = self._radius_sil
-            radius = self._radius
-            if dist < radius_sil:
-                depth = max_dwell_time - (max_dwell_time / radius_sil) * np.sqrt(radius_sil ** 2 - dist_sq)
-            elif dist < radius:
-                depth = max_dwell_time * (1 - (dist - radius_sil) / (radius - radius_sil))
-            else:
-                return Q_(0, 'microsecond')
-            return Q_(max(depth, min_dwell_time), 'microsecond')
-
-        super().__init__(dwell_time=dwell_func, repeats=repeats)
-
-    def set_unit(self, length_unit):
-        """Scale radii to the given unit (e.g. 'nm', 'µm'). Call this ONCE before rasterization."""
-        self._radius_sil = scale_to(length_unit, self._radii_unit*self._radius_sil)
-        self._radius = scale_to(length_unit, self._radii_unit*self._radius)
-        self._radii_unit = length_unit
-
-
-class SpecialMill(MillBase):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-
