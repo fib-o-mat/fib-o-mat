@@ -11,16 +11,27 @@ To contribute custom code, follow the steps below.
     4. push the code. ``git push origin my-new-branch``
     5. create a pull request from the fork (see `here <https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork>`__)
 
-|:test_tube:| Versioning
-------------------------
-Versioning is done with help of `bump2version <https://github.com/c4urself/bump2version>`__.
-Run
+|:test_tube:| Releasing
+-----------------------
 
-.. code-block:: bash
+Versioning is done with the help of `bump2version <https://github.com/c4urself/bump2version>`__ (configured in ``.bumpversion.cfg``).
+To publish a new release, follow these steps in the root folder of fib-o-mat. ``[version]`` is the new version number, e.g. ``0.7.0``.
 
-    $ bump2version {major|minor|patch}
+    1. Make sure that all tests pass (``pytest tests/``) and that the documentation builds without warnings (see "Building the docs" below).
+    2. Check that ``CHANGELOG.md`` describes all changes in the ``## [Unreleased]`` section. Breaking changes must be marked with **Breaking:** (and summarized at the top for larger releases).
+    3. Add the new version to ``docs/_static/switcher.json`` (below the entries ``latest`` and ``stable``, newest version first). The ``version`` value must match the name of the version on Read the Docs, which is the git tag ``v[version]``.
+    4. Commit these changes. ``bump2version`` refuses to run in a dirty working directory.
+    5. Run
 
-in the root folder of fib-o-mat to increase the corresponding number. Push the resulting commit to the git repository.
+       .. code-block:: bash
+
+           $ bump2version {major|minor|patch}
+
+       This increases the version in ``pyproject.toml`` and ``src/fibomat/__init__.py``, renames the ``[Unreleased]`` heading in ``CHANGELOG.md`` to ``[[version]] - [current date]``, creates a commit and tags it with ``v[version]``.
+    6. Add a new, empty ``## [Unreleased]`` heading above the new release at the top of ``CHANGELOG.md`` (``bump2version`` cannot insert it) and commit.
+    7. Push the commits and the tag: ``git push && git push --tags``.
+    8. Build the packages (see "Building wheel packages" below) and upload them with ``twine upload target/wheels/*``.
+    9. Activate the new version ``v[version]`` on `Read the Docs <https://readthedocs.org/projects/fib-o-mat/>`__ (if it is not activated automatically) and check that it appears in the version selector of the documentation.
 
 |:test_tube:| Building the docs
 -------------------------------
