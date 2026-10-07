@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [0.7.0] - 2026-10-07
 
 ### Breaking changes (summary)
 This release reworks the package step by step; the detailed entries are listed below. The most important changes
@@ -25,7 +25,7 @@ when migrating from 0.6.0:
 
 ### Changed
 - Documentation (`docs/`) rebuilt: pydata-sphinx-theme with search and a version switcher (`docs/_static/switcher.json`, hosted on Read the Docs), the changelog (`docs/changelog.md` includes `CHANGELOG.md`), an auto-generated API reference (`docs/api/`, one page per public package), and all user guide pages and use cases adapted to the new API with spelling and grammar fixes. Interactive bokeh plots of the `examples/` scripts are embedded with the new `fibomat-plot` directive (`docs/_ext/fibomat_plot.py`), which replaces the old `bokeh-plot-link` patching. The stale `docs/src`, `docs/tests`, `docs/examples`, `docs/plots`, `docs/requirements_docs.txt` and other leftovers were removed. `.readthedocs.yml` (Python 3.12, Rust toolchain, no conda) and the `docs` extra in `pyproject.toml` are updated. Build with `make html` in `docs/`.
-- `bump2version` renames the `[Unreleased]` heading of this file to the new version and date (see `.bumpversion.cfg`).
+- `bump2version` renames the `[0.7.0] - 2026-10-07` heading of this file to the new version and date (see `.bumpversion.cfg`).
 - Docstring fixes needed for the docs build in `Arc.from_bulge` and `DimLattice`.
 
 - The scripts in `examples/` are adapted to the new API (`Layout`, `Vector * unit('µm')`, `DimFloat` values like `1 * unit('nm')`, explicit imports from `fibomat.layout`, `fibomat.mill`, `fibomat.units`, `fibomat.arrangements` and `fibomat.composite_shapes`, the new results of `curve_tools`, `Lattice.from_counts/from_rect/from_boundary`) and checked by running them and looking at their plots; `ring_shape.py` (which raised an error on purpose) is a working example of a custom shape; the examples of the lattices show the callbacks, empty lattice sites, lattices of patterns and of sites; the smoothing example uses a curve without cusps (cusps cannot be smoothed); the `raster_styles/contour_parallel*.py` examples are only adapted in syntax (`ContourParallel` is not reworked yet). `Layout.add_annotation` accepts every dimensioned transformable (e.g. `DimText`, `DimGroup`), not only `DimShape`s.

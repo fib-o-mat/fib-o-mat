@@ -4,7 +4,7 @@ requires = ["maturin>=1.5,<2.0"]
 
 [project]
 name = "fibomat"
-version = "0.6.0"
+version = "0.7.0"
 description = "fib-o-mat is a toolbox to generate patterns for focused ion beam instruments."
 requires-python = ">=3.8"
 authors = [
