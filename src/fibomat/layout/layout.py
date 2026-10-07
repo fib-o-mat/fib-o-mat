@@ -1,38 +1,60 @@
-"""Provides the :class:`Layout` class."""
+"""Provides the :class:`Layout` class.
+
+Example:
+    >>> from fibomat.layout import Layout
+    >>> from fibomat.linalg import DimVector
+    >>> from fibomat.mill import Mill
+    >>> from fibomat.raster_styles import ScanSequence, one_d
+    >>> from fibomat.shapes import Line
+    >>> from fibomat.units import unit
+    >>> layout = Layout(description='test', fov_scale=1.2)
+    >>> site = layout.create_site(DimVector(0 * unit('µm'), 0 * unit('µm')))
+    >>> _ = site.create_pattern(
+    ...     Line((0, 0), (1, 0)) * unit('µm'), Mill(1. * unit('ms'), 1),
+    ...     one_d.Curve(0.25 * unit('µm'), ScanSequence.CONSECUTIVE)
+    ... )
+    >>> layout.number_of_sites
+    1
+    >>> site.fov_scale
+    1.2
+"""
 from __future__ import annotations
 
 import dataclasses
 import re
-from typing import TYPE_CHECKING, List, Optional, Set, Type, TypeVar, Union
+import typing as t
+import warnings
 
 from fibomat.arrangements import ArrangementBase
 from fibomat.describable import Describable
 from fibomat.layout.pattern import Pattern
-from fibomat.layout.site import Site
-from fibomat.linalg import DimVectorLike
-from fibomat.linalg.boundingboxes import boundingbox
-from fibomat.linalg.boundingboxes.dim_boundingbox import DimBoundingBox
+from fibomat.layout.site import DEFAULT_FOV_SCALE, Site, _check_fov_scale
+from fibomat.linalg import DimBoundingBox, DimVectorLike
 from fibomat.shapes import DimShape
 from fibomat.utils import PathLike
 
-if TYPE_CHECKING:  # pragma: no cover
+if t.TYPE_CHECKING:  # pragma: no cover
     # The backends depend on `Site` and `Pattern` of this package, hence, they are imported lazily (in the methods).
     from fibomat.backend import BackendBase
     from fibomat.default_backends import BokehBackend
 
 
+__all__ = ['Layout']
+
+
 @dataclasses.dataclass(frozen=True)
 class _Annotation:
+    """A shape which is only plotted."""
     dim_shape: DimShape
     filled: bool
-    color: Optional[str]
-    description: Optional[str]
+    color: t.Optional[str]
+    description: t.Optional[str]
 
 
-BackendType = TypeVar("BackendType")
+BackendT = t.TypeVar('BackendT')
 
 
-def _registry():
+def _registry() -> t.Any:
     """Return the backend registry (imported lazily because the backends depend on this package).
 
     The default backends are imported, too, because this registers them.
@@ -44,148 +66,209 @@ def _registry():
 
 
 class Layout(Describable):
-    """
-    This class is the glueing between all subcomponents of the library.
-    A layout is the pattern design for a sample: all shapes and their milling settings are added to this class (via
-    :class:`~fibomat.layout.site.Site` and :class:`~fibomat.layout.pattern.Pattern`) and can be exported with the help
-    of registered backends.
+    """A layout is the pattern design for a sample.
+
+    This class is the glueing between all subcomponents of the library: a layout consists of
+    :class:`~fibomat.layout.site.Site` objects (a field of view at a position), which hold
+    :class:`~fibomat.layout.pattern.Pattern` objects (a shape with a mill and a raster style). A layout is exported
+    with the help of registered backends or plotted.
     """
 
-    def __init__(self, *, description: Optional[str] = None):
+    def __init__(self, *, description: t.Optional[str] = None, fov_scale: float = DEFAULT_FOV_SCALE):
         """
         Args:
-            description (str, optional): Optional description of the project, default to None
+            description (str, optional): Optional description of the layout
+            fov_scale (float): factor by which the minimal field of view of a site is increased if the site is created
+                with :meth:`create_site` without an explicit field of view (at least 1). The default adds a margin of
+                10 %.
+
+        Raises:
+            ValueError: Raised if fov_scale is smaller than 1 or not finite.
         """
         super().__init__(description)
 
-        self._sites: List[Site] = []
-        self._annotations: List[_Annotation] = []
+        self._fov_scale = _check_fov_scale(fov_scale)
+
+        self._sites: t.List[Site] = []
+        self._annotations: t.List[_Annotation] = []
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}(description={self._description!r}, n_sites={len(self._sites)})'
+
+    @property
+    def fov_scale(self) -> float:
+        """Factor by which the minimal field of view of the sites created with :meth:`create_site` is increased.
+
+        Access:
+            get
+        """
+        return self._fov_scale
 
     def create_site(
         self,
         dim_position: DimVectorLike,
-        dim_fov: Optional[DimVectorLike] = None,
-        description: Optional[str] = None,
+        dim_fov: t.Optional[DimVectorLike] = None,
+        description: t.Optional[str] = None,
     ) -> Site:
-        """
-        Creates and Site in-place (hence, the Site is automatically added to the layout). Patterns can be added to the
+        """Creates a site in-place (the site is automatically added to the layout). Patterns can be added to the
         returned object.
 
-        See :class:`fibomat.layout.site.Site.__init__` for argument description.
+        If no `dim_fov` is given, the field of view is calculated from the added patterns and increased by the
+        :attr:`Layout.fov_scale` of the layout.
+
+        See :class:`~fibomat.layout.site.Site` for the description of the arguments.
+
+        Args:
+            dim_position (DimVectorLike): center of the site
+            dim_fov (DimVectorLike, optional): field of view
+            description (str, optional): description
 
         Returns:
             Site
         """
-        new_site: Site = Site(dim_position, dim_fov, description=description)
+        new_site = Site(dim_position, dim_fov, description=description, fov_scale=self._fov_scale)
         self._sites.append(new_site)
         return new_site
 
-    def add_site(self, site_like: Site) -> None:
-        """
-        Adds a Site to the project.
+    def add_site(self, site_like: t.Union[Site, ArrangementBase]) -> None:
+        """Adds a site (or an arrangement of sites) to the layout.
         Alternatively, the '+=' operator can be used.
 
-        Args:
-            site_like (Site): new site
+        Note that the field of view of a site which is added with this method is not influenced by
+        :attr:`Layout.fov_scale`; use the `fov_scale` argument of :class:`~fibomat.layout.site.Site`.
 
-        Returns:
-            None
+        Args:
+            site_like (Site, ArrangementBase): new site(s)
+
+        Raises:
+            TypeError: Raised if `site_like` is no site or no arrangement of sites.
         """
         if isinstance(site_like, ArrangementBase):
-            for site_ in site_like.arrangement_elements():
-                self._sites.append(site_)
+            new_sites = list(site_like.arrangement_elements())
         else:
-            self._sites.append(site_like)
+            new_sites = [site_like]
 
-    @property
-    def number_of_sites(self) -> int:
-        """int: number of added sites"""
-        return len(self._sites)
+        for new_site in new_sites:
+            if not isinstance(new_site, Site):
+                raise TypeError(f'Only sites can be added to a layout, got {type(new_site).__name__}.')
 
-    @property
-    def bounding_box(self) -> Optional[DimBoundingBox]:
-        if not self._sites:
-            return None
-        else:
-            bbox = self._sites[0].bounding_box
+        self._sites.extend(new_sites)
 
-            for site in self._sites[1:]:
-                bbox = bbox.extended(site.bounding_box)
-
-            return bbox
-
-    def __iadd__(self, site_like):
+    def __iadd__(self, site_like: t.Union[Site, ArrangementBase]) -> Layout:
         """See :meth:`~Layout.add_site`."""
         self.add_site(site_like)
         return self
 
+    @property
+    def sites(self) -> t.List[Site]:
+        """The sites of the layout (a copy of the list).
+
+        Access:
+            get
+        """
+        return list(self._sites)
+
+    @property
+    def number_of_sites(self) -> int:
+        """Number of sites.
+
+        Access:
+            get
+        """
+        return len(self._sites)
+
+    @property
+    def bounding_box(self) -> t.Optional[DimBoundingBox]:
+        """Bounding box of the patterns of all sites (absolute coordinates), None if there are no patterns.
+
+        Access:
+            get
+        """
+        bbox: t.Optional[DimBoundingBox] = None
+
+        for site in self._sites:
+            if site.empty:
+                continue
+            site_bbox = site.bounding_box_abs
+            bbox = site_bbox if bbox is None else bbox.extended(site_bbox)
+
+        return bbox
+
     @staticmethod
     def _export(
-        backend_class: Type[BackendType],
-        sites: Union[Site, List[Site]],
-        descr_pattern: Optional[Set[str]] = None,
-        **kwargs,
-    ) -> BackendType:
-        def _matches(description_) -> bool:
-            for pattern in descr_pattern:
-                if re.match(pattern, description_):
-                    return True
-            return False
+        backend_class: t.Type[BackendT],
+        sites: t.Union[Site, t.Sequence[Site]],
+        descr_pattern: t.Optional[t.Set[str]] = None,
+        **kwargs: t.Any,
+    ) -> BackendT:
+        """Create a backend and let it process the sites.
 
-        exporter: Type[BackendBase] = backend_class(**kwargs)
+        Args:
+            backend_class (Type[BackendBase]): backend
+            sites (Site, Sequence[Site]): sites
+            descr_pattern (Set[str], optional): if given, only sites with a description which matches one of the
+                regular expressions are processed. Ignored for a single site.
+            **kwargs: arguments of the backend
+
+        Returns:
+            BackendBase
+
+        Raises:
+            ValueError: Raised if `descr_pattern` is given and no site matches.
+        """
+        exporter: BackendBase = backend_class(**kwargs)  # type: ignore[call-arg]
+
         if isinstance(sites, Site):
             if descr_pattern:
-                print(
-                    "Warning: ignoring descriptions in _export for single site export."
-                )
+                warnings.warn('Ignoring descr_pattern for the export of a single site.', stacklevel=3)
             exporter.process_site(sites)
-        else:
-            for site_ in sites:
-                if descr_pattern:
-                    description = site_.description
-                    if description and _matches(description):
-                        exporter.process_site(site_)
-                        # descriptions.remove(description)
-                else:
-                    exporter.process_site(site_)
+            return exporter  # type: ignore[return-value]
 
-            # if descriptions:
-            #    raise RuntimeError(f'Could not find sites with descriptions: {descriptions} in layout')
+        processed = 0
+        for site in sites:
+            if descr_pattern:
+                description = site.description
+                if not description or not any(re.match(regex, description) for regex in descr_pattern):
+                    continue
+            exporter.process_site(site)
+            processed += 1
 
-        return exporter
+        if descr_pattern and not processed:
+            raise ValueError(f'No site has a description which matches one of {sorted(descr_pattern)}.')
+
+        return exporter  # type: ignore[return-value]
 
     def plot(
         self,
         show: bool = True,
-        filename: Optional[PathLike] = None,
-        descr_pattern: Optional[Set[str]] = None,
-        **kwargs,
+        filename: t.Optional[PathLike] = None,
+        descr_pattern: t.Optional[t.Set[str]] = None,
+        **kwargs: t.Any,
     ) -> BokehBackend:
-        """
-        Plots and save the project using the :class:`~fibomat.default_backends.bokeh_backend.BokehBackend`.
+        """Plot (and save) the layout with the :class:`~fibomat.default_backends.bokeh_backend.BokehBackend`.
 
         Args:
-            show (bool): if true, the plot is opened in a browser automatically
+            show (bool): if True, the plot is opened in a browser automatically
             filename (PathLike, optional): if filename is given, the plot is saved in this file. The file suffix should
-                                           be `*.htm` or `*.html`, default to None
-            `**kwargs`: parameters for the bokeh backend. These are directly passed to the __init__ method of the
-                        BokehBackend class. The title parameter is automatically set to the :attr:`Layout.description`
+                be `*.htm` or `*.html`.
+            descr_pattern (Set[str], optional): if given, only sites with a description matching one of the regular
+                expressions are plotted.
+            **kwargs: parameters for the bokeh backend. These are directly passed to the __init__ method of the
+                BokehBackend class. The title parameter defaults to :attr:`Layout.description`.
 
         Returns:
-            None
-        """
+            BokehBackend
 
+        Raises:
+            ValueError: Raised if `descr_pattern` is given and no site matches.
+        """
         from fibomat.default_backends import (  # pylint: disable=import-outside-toplevel
             BokehBackend, StubRasterStyle
         )
 
-        plotter: BokehBackend = self._export(
-            BokehBackend,
-            self._sites,
-            descr_pattern=descr_pattern,
-            title=self._description,
-            **kwargs,
-        )
+        kwargs.setdefault('title', self._description)
+
+        plotter: BokehBackend = self._export(BokehBackend, self._sites, descr_pattern=descr_pattern, **kwargs)
 
         for annot in self._annotations:
             raster = StubRasterStyle(2) if annot.filled else StubRasterStyle(1)
@@ -210,116 +293,100 @@ class Layout(Describable):
 
         return plotter
 
-    def export(
-        self, exp_backend: Union[str, Type[BackendBase]], **kwargs
-    ) -> BackendBase:
-        """
-        Exports the project. Note that the method returns the backend object so you will be able to save a file or show
-        a plot. See backends example nd docs for details.
+    @staticmethod
+    def _backend_class(exp_backend: t.Union[str, t.Type[BackendT]]) -> t.Type[BackendT]:
+        """Return the backend class of a registered name or the class itself."""
+        if isinstance(exp_backend, str):
+            return _registry().get(exp_backend)  # type: ignore[no-any-return]
+        return exp_backend
 
-        .. note:: The export method does not save any files on its one. This must be done by the user manually. See docs
-                  of the used backend for details.
+    def export(self, exp_backend: t.Union[str, t.Type[BackendT]], **kwargs: t.Any) -> BackendT:
+        """Exports the layout. Note that the method returns the backend object so you will be able to save a file or
+        show a plot. See the docs of the backends for details.
+
+        .. note:: The export method does not save any files on its own. This must be done by the user manually. See
+                  docs of the used backend for details.
 
         Args:
-            exp_backend (str or Type[backend.BackendBase]):
-                name of the backend or class. The backend must be registered before.
+            exp_backend (str, Type[BackendBase]): name of the backend or class. The backend must be registered before
+                if a name is used.
             **kwargs: optional arguments are passed to the backend's __init__ method
 
         Returns:
             BackendBase
+
+        Raises:
+            KeyError: Raised if no backend is registered with the name `exp_backend`.
         """
+        kwargs.setdefault('description', self._description)
+        return self._export(self._backend_class(exp_backend), self._sites, **kwargs)
 
-        if isinstance(exp_backend, str):
-            exp_backend = _registry().get(exp_backend)
+    def export_multi(self, exp_backend: t.Union[str, t.Type[BackendT]], **kwargs: t.Any) -> t.List[BackendT]:
+        """Similar to :meth:`Layout.export` but for each :class:`~fibomat.layout.site.Site` an individual backend
+        instance is returned.
 
-        return self._export(
-            exp_backend, self._sites, description=self._description, **kwargs
-        )
-
-    def export_multi(
-        self, exp_backend: Union[str, Type[BackendBase]], **kwargs
-    ) -> List[BackendBase]:
-        """
-        Similar to :meth:`Layout.export` but for each :class:`fibomat.layout.site.Site` an individual backend instance is
-        returned.
-
-        This can be usefull if multiple sites are used within fibomat but the pattern system only supports one site at a
+        This can be useful if multiple sites are used within fibomat but the pattern system only supports one site at a
         time.
 
+        Args:
+            exp_backend (str, Type[BackendBase]): name of the backend or class
+            **kwargs: optional arguments are passed to the backend's __init__ method
+
         Returns:
-            List[BackendBase]
+            List[BackendBase]: one backend per site
         """
-        backends: List[BackendBase] = []
+        backend_class = self._backend_class(exp_backend)
+        kwargs.setdefault('description', self._description)
 
-        if isinstance(exp_backend, str):
-            exp_backend = _registry().get(exp_backend)
-
-        for added_site in self._sites:
-            backends.append(
-                self._export(
-                    exp_backend, added_site, description=self._description, **kwargs
-                )
-            )
-
-        return backends
+        return [self._export(backend_class, site, **kwargs) for site in self._sites]
 
     def export_with_description(
         self,
-        exp_backend: Union[str, Type[BackendBase]],
-        descr_pattern: Set[str],
-        **kwargs,
-    ) -> BackendBase:
-        """
-        Exports the project. Note that the method returns the backend object so you will be able to save a file or show
-        a plot. See backends example nd docs for details.
-
-        Only sites with a description given in `descriptions` will be exported. An exception is raised, if no site is
-        found with a given description.
-
-        .. note:: The export method does not save any files on its one. This must be done by the user manually. See docs
-                  of the used backend for details.
+        exp_backend: t.Union[str, t.Type[BackendT]],
+        descr_pattern: t.Set[str],
+        **kwargs: t.Any,
+    ) -> BackendT:
+        """Exports only the sites with a matching description. Otherwise identical to :meth:`Layout.export`.
 
         Args:
-            exp_backend (str or Type[backend.BackendBase]):
-                name of the backend or class. The backend must be registered before.
-            descr_pattern (Set[str]): a set of descriptions of the sites which should be exported.
+            exp_backend (str, Type[BackendBase]): name of the backend or class
+            descr_pattern (Set[str]): regular expressions; only sites with a description which matches (with
+                :func:`re.match`) one of them are exported.
             **kwargs: optional arguments are passed to the backend's __init__ method
 
         Returns:
             BackendBase
+
+        Raises:
+            ValueError: Raised if no site has a matching description.
         """
-        if isinstance(exp_backend, str):
-            exp_backend = _registry().get(exp_backend)
+        kwargs.setdefault('description', self._description)
         return self._export(
-            exp_backend,
-            self._sites,
-            description=self._description,
-            descr_pattern=descr_pattern,
-            **kwargs,
+            self._backend_class(exp_backend), self._sites, descr_pattern=set(descr_pattern), **kwargs
         )
 
     def add_annotation(
         self,
         dim_shape: DimShape,
         filled: bool = False,
-        color: Optional[str] = None,
-        description: Optional[str] = None,
+        color: t.Optional[str] = None,
+        description: t.Optional[str] = None,
     ) -> None:
-        """
-        Add `dim_shape` to a annotation layer. This layer is only used to visualize extra shapes and is ignored by the
-        exporting backend.
+        """Add `dim_shape` to an annotation layer. This layer is only used to visualize extra shapes and is ignored by
+        the exporting backends.
 
         Args:
             dim_shape (DimShape): shape
-            filled (bool): If True, shape is plotted filled (only possible if shape is closed)
-            color (str, Optional): a color bokeh can understand, default to None
-            description (str, optional): description, default to None
+            filled (bool): If True, the shape is plotted filled (only possible if the shape is closed)
+            color (str, optional): a color bokeh can understand
+            description (str, optional): description
 
-        Returns:
-            None
+        Raises:
+            TypeError: Raised if `dim_shape` is no DimShape.
         """
+        if not isinstance(dim_shape, DimShape):
+            raise TypeError(f'dim_shape must be a DimShape (shape * unit), got {type(dim_shape).__name__}.')
+
         self._annotations.append(
-            _Annotation(
-                dim_shape=dim_shape, filled=filled, color=color, description=description
-            )
+            _Annotation(dim_shape=dim_shape, filled=bool(filled), color=color, description=description)
         )

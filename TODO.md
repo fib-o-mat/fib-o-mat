@@ -35,3 +35,9 @@ Open points which are postponed on purpose.
   has no argument checks.
 - Floating point noise: `scale_factor(unit('nm'), unit('µm'))` is `999.9999999999999` (pint converts through the
   prefixes), so converted positions are not exact (`249.99999999999997` instead of `250`).
+
+## Backends and the new units
+
+- Exporting a layout works up to the rasterization, but the default backends are not reworked yet: e.g. the
+  `SpotListBackend` fails in `_rasterize_and_add` (`dwell_points[:, :2] += self._site_pos`, `ndarray += Vector`), other
+  backends use the old unit API (`Q_`, `.m`, ...).
