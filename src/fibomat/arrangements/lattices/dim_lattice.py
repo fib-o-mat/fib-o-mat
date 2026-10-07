@@ -3,8 +3,8 @@ from typing import Union, Callable, Optional, Tuple, List
 from fibomat.shapes import DimShape
 from fibomat.linalg import Transformable, DimTransformable, Vector, DimVector, VectorLike, DimVectorLike
 from fibomat.units import U_, scale_factor, LengthQuantity, has_length_dim
-from fibomat.layout.lattices.lattice_base import LatticeBaseMixin
-from fibomat.layout.groups.dim_group import DimGroup
+from fibomat.arrangements.lattices.lattice_base import LatticeBaseMixin
+from fibomat.arrangements.groups.dim_group import DimGroup
 from fibomat.shapes import Rect
 
 
@@ -58,7 +58,7 @@ class DimLattice(DimGroup, LatticeBaseMixin):
         predicate: Optional[Union[Callable, List[Callable]]] = None,
         explode: bool = False,
         remove_outliers: bool = False,
-        # break_layouts: bool = False
+        # break_arrangements: bool = False
         dim_seed: Optional[DimVectorLike] = None
     ):
         """

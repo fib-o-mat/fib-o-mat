@@ -3,8 +3,8 @@ from typing import Iterable, Union, Callable, Optional, Tuple, List
 from fibomat.composite_shapes import HollowArcSpline
 from fibomat.shapes import ArcSplineCompatible, Rect
 from fibomat.linalg import Transformable, Vector, VectorLike
-from fibomat.layout.lattices.lattice_base import LatticeBaseMixin
-from fibomat.layout.groups.group import Group
+from fibomat.arrangements.lattices.lattice_base import LatticeBaseMixin
+from fibomat.arrangements.groups.group import Group
 from fibomat.units import U_
 
 import numpy as np
@@ -56,7 +56,7 @@ class Lattice(Group, LatticeBaseMixin):
         explode: bool = False,
         remove_outliers: bool = False,
         seed: Optional[VectorLike] = None
-        # break_layouts: bool = False
+        # break_arrangements: bool = False
     ):
         u = Vector(u)
         v = Vector(v)
@@ -82,7 +82,7 @@ class Lattice(Group, LatticeBaseMixin):
 
     def __mul__(self, other):
         if isinstance(other, U_):
-            from fibomat.layout.lattices.dim_lattice import DimLattice
+            from fibomat.arrangements.lattices.dim_lattice import DimLattice
 
             # mapper = np.vectorize(lambda elem: elem * other)
 

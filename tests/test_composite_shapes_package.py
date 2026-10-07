@@ -41,12 +41,12 @@ class TestLazyAccessToCompositeShapes:
         assert not hasattr(shapes, 'Foo')
 
     def test_primitives_do_not_depend_on_higher_level_packages(self):
-        # `fibomat.shapes` must not import `curve_tools`, `layout` or the composite shapes (they depend on it)
+        # `fibomat.shapes` must not import `curve_tools`, `arrangements` or the composite shapes (they depend on it)
         code = (
             'import sys, fibomat.shapes as shapes\n'
             'for name in ("Shape", "ArcSpline", "Line", "Arc", "Circle", "Rect", "Polygon", "ParametricCurve", "Biarc"):\n'
             '    assert hasattr(shapes, name), name\n'
-            'for package in ("curve_tools", "layout", "composite_shapes"):\n'
+            'for package in ("curve_tools", "arrangements", "composite_shapes"):\n'
             '    assert "fibomat." + package not in sys.modules, package\n'
         )
         result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, check=False)

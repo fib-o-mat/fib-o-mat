@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Optional, List, Any
 
-from fibomat.layout.groups.group_base import GroupBase
+from fibomat.arrangements.groups.group_base import GroupBase
 from fibomat.linalg import DimVector, DimTransformable, DimBoundingBox
 
 

@@ -7,7 +7,7 @@ from fibomat.shapes import Shape
 from fibomat.from_file.dxf import shapes_from_dxf
 from fibomat.from_file.svg import shapes_from_svg
 from fibomat.utils import PathLike
-from fibomat.layout import Group
+from fibomat.arrangements import Group
 from fibomat.units import LengthQuantity
 
 

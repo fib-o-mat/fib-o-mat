@@ -5,11 +5,11 @@ import numpy as np
 
 from fibomat.composite_shapes import HollowArcSpline
 from fibomat.shapes import ArcSplineCompatible, ArcSpline, Line
-from fibomat.linalg import TransformableBase, Vector, DimVector
+from fibomat.linalg import Transformable, Vector, DimVector
 from fibomat.curve_tools import fill_with_lines
-from fibomat.layout.layoutbase import LayoutBase
-from fibomat.layout.utils import _round_towards_mean, _check_lattice_vectors
-from fibomat.layout.groups.group_base import GroupBase
+from fibomat.arrangements.arrangementbase import ArrangementBase
+from fibomat.arrangements.utils import _round_towards_mean, _check_lattice_vectors
+from fibomat.arrangements.groups.group_base import GroupBase
 from fibomat.linalg.helpers import GeomLine
 
 
@@ -41,9 +41,10 @@ class LatticeBaseMixin(abc.ABC):
 
 
 
-        # from fibomat import Sample, U_
+        # from fibomat.layout import Layout
+        # from fibomat import U_
         # from fibomat.shapes import Spot
-        # s = Sample()
+        # s = Layout()
         # s.add_annotation(boundary * U_('µm'))
         # for plane in lattice_planes:
         #     for line in plane:
@@ -205,8 +206,8 @@ class LatticeBaseMixin(abc.ABC):
             if lattice_site_element:
                 lattice_site_element = lattice_site_element.translated_to(unscale_vec(lattice_point_xy + center))
 
-                if explode and isinstance(lattice_site_element, LayoutBase):
-                    sub_elements = lattice_site_element._layout_elements()
+                if explode and isinstance(lattice_site_element, ArrangementBase):
+                    sub_elements = lattice_site_element._arrangement_elements()
                 else:
                     sub_elements = [lattice_site_element]
                         

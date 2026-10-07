@@ -33,7 +33,7 @@ __all__ = [
 ]
 
 
-# The composite shapes live in `fibomat.composite_shapes` (they depend on `curve_tools` and `layout`, which depend on this
+# The composite shapes live in `fibomat.composite_shapes` (they depend on `curve_tools` and `arrangements`, which depend on this
 # package). For backward compatibility, they are still available as attributes of this package; they are imported
 # lazily on first access.
 _COMPOSITE_SHAPES = ("HollowArcSpline", "Ring", "Text", "DimText")

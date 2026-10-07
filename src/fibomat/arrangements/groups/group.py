@@ -3,7 +3,7 @@
 from __future__ import annotations
 from typing import Optional, List, TypeVar
 
-from fibomat.layout.groups.group_base import GroupBase
+from fibomat.arrangements.groups.group_base import GroupBase
 from fibomat.linalg import Vector, Transformable, BoundingBox, VectorLike
 from fibomat.units import U_
 
@@ -18,7 +18,7 @@ class Group(GroupBase[Transformable, Vector, BoundingBox], Transformable):
 
     def __mul__(self, other):
         if isinstance(other, U_):
-            from fibomat.layout.groups.dim_group import DimGroup
+            from fibomat.arrangements.groups.dim_group import DimGroup
             return DimGroup([elem * other for elem in self.elements], description=self.description)
         raise NotImplementedError
 

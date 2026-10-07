@@ -9,7 +9,7 @@ import xmltodict
 from fibomat.backend.backendbase import shape_type
 from fibomat.linalg import BoundingBox, Vector
 from fibomat.backend import BackendBase
-from fibomat import Site, Pattern
+from fibomat.layout import Site, Pattern
 from fibomat.shapes import Polyline, Spot, Shape
 from fibomat.mill import MillBase
 from fibomat.raster_styles import two_d, one_d, zero_d

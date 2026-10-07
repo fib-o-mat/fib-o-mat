@@ -12,18 +12,18 @@ import numpy as np
 import PIL.Image
 from bokeh.util import compiler
 from bokeh.util.compiler import AttrDict, set_cache_hook
-from fibomat import layout, shapes, composite_shapes
+from fibomat import arrangements, shapes, composite_shapes
 from fibomat.linalg.vectors import DimVector, DimVectorLike
 from fibomat.backend import BackendBase
 from fibomat.backend.backendbase import ShapeNotSupportedError, shape_type
 from fibomat.default_backends._bokeh_site import BokehSite, ShapeType
 from fibomat.default_backends.measuretool import MeasureTool
 from fibomat.mill import Mill
-from fibomat.pattern import Pattern
+from fibomat.layout.pattern import Pattern
 from fibomat.raster_styles.rasterstyle import RasterStyle
 from fibomat.shapes import DimShape
 from fibomat.shapes.rasterizedpoints import RasterizedPoints
-from fibomat.site import Site
+from fibomat.layout.site import Site
 from fibomat.units import (
     Q_,
     U_,
@@ -446,9 +446,9 @@ class BokehBackend(BokehBackendBase):
                         pass
                 self.process_unknown(extracted_ptn)
 
-        if isinstance(ptn.dim_shape, layout.LayoutBase):
+        if isinstance(ptn.dim_shape, arrangements.ArrangementBase):
             if (
-                isinstance(ptn.dim_shape, layout.DimLattice)
+                isinstance(ptn.dim_shape, arrangements.DimLattice)
                 and self._plot_reduced_latties
             ):
                 # plot only first 4 elements and dashed boundary
@@ -460,10 +460,10 @@ class BokehBackend(BokehBackendBase):
                 for v in range(v_max):
                     for u in range(u_max):
                         # first_four.append(lattice.elements_by_uv[v, u])
-                        extracted_shape = layout.Group(lattice_elements[v, u])
+                        extracted_shape = arrangements.Group(lattice_elements[v, u])
                         # print(extracted_shape)
                         if extracted_shape:
-                            if isinstance(extracted_shape, layout.LayoutBase):
+                            if isinstance(extracted_shape, arrangements.ArrangementBase):
                                 self.process_pattern(
                                     Pattern(
                                         extracted_shape,
@@ -503,9 +503,9 @@ class BokehBackend(BokehBackendBase):
                     hatch_pattern="x",
                 )
             else:
-                # ptn.dim_shape[0]: layout.LayoutBase
-                for extracted_shape in ptn.dim_shape.layout_elements():
-                    if isinstance(extracted_shape, layout.LayoutBase):
+                # ptn.dim_shape[0]: arrangements.ArrangementBase
+                for extracted_shape in ptn.dim_shape.arrangement_elements():
+                    if isinstance(extracted_shape, arrangements.ArrangementBase):
                         self.process_pattern(
                             Pattern(
                                 extracted_shape,

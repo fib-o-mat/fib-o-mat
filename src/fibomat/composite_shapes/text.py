@@ -456,7 +456,7 @@ class DimText(DimComposite):
         for shape in self._obj.shapes():
             yield DimShape(shape, self._unit)
 
-    def layout_elements(self) -> t.Iterator[DimShape]:
+    def arrangement_elements(self) -> t.Iterator[DimShape]:
         """The shapes of all glyphs (so that backends can export a text like a group of shapes).
 
         Yields:

@@ -1,7 +1,7 @@
 from typing import Optional
 
-from fibomat.layout.lattices.lattice_builder_base import LatticeBuilderBase
-from fibomat.layout.lattices.dim_lattice import DimLattice
+from fibomat.arrangements.lattices.lattice_builder_base import LatticeBuilderBase
+from fibomat.arrangements.lattices.dim_lattice import DimLattice
 from fibomat.linalg import VectorLike, DimVector, DimVectorLike
 from fibomat.units import LengthQuantity, U_, Q_, has_length_dim
 

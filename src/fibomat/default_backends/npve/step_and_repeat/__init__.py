@@ -10,9 +10,9 @@ from fibomat.utils import PathLike
 from fibomat.backend import BackendBase
 
 # from fibomat.default_backends import BitmapBackend
-from fibomat.sample import Sample
-from fibomat.site import Site
-from fibomat.pattern import Pattern
+from fibomat.layout import Layout
+from fibomat.layout.site import Site
+from fibomat.layout.pattern import Pattern
 from fibomat.composite_shapes import HollowArcSpline, Ring
 from fibomat.shapes import (
     Rect,
@@ -117,7 +117,7 @@ class StepAndRepeatBackend(BackendBase):
     def process_pattern(self, ptn: Pattern) -> None:
         if "use_bitmap" in ptn.kwargs:
             print(ptn.mill, ptn)
-            s = Sample()
+            s = Layout()
             bbox = ptn.bounding_box
             site = s.create_site(
                 dim_position=bbox.center, dim_fov=(bbox.width, bbox.height)

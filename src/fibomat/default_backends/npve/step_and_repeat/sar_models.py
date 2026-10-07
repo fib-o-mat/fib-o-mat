@@ -1,6 +1,6 @@
 from typing import List
 
-from fibomat.site import Site
+from fibomat.layout.site import Site
 from fibomat.linalg import Vector
 from fibomat.units import U_
 from fibomat.default_backends.npve.step_and_repeat.common_models import FIBShape

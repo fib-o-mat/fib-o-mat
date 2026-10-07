@@ -240,7 +240,7 @@ class DimGlyph(DimComposite):
     def __len__(self) -> int:
         return len(self._obj)
 
-    def layout_elements(self) -> t.Iterator[DimShape]:
+    def arrangement_elements(self) -> t.Iterator[DimShape]:
         """The shapes of the glyph (so that backends can export a glyph like a group of shapes).
 
         Yields:

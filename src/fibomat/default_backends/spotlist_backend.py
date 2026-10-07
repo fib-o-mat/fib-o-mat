@@ -6,9 +6,10 @@ import configparser
 import numpy as np
 
 from fibomat.backend import BackendBase
-from fibomat import site, units, pattern, shapes, utils
+from fibomat import units, shapes, utils
+from fibomat.layout import site, pattern
 from fibomat.linalg import BoundingBox
-from fibomat.pattern import Pattern
+from fibomat.layout.pattern import Pattern
 from fibomat.rasterizedpattern import RasterizedPattern
 
 

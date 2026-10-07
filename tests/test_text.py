@@ -464,7 +464,7 @@ class TestDimText:
         shapes = list(dim_text.shapes())
         assert all(isinstance(shape, DimShape) and shape.unit == dim_text.unit for shape in shapes)
         assert len(shapes) == sum(len(glyph) for glyph in glyphs)
-        assert list(dim_text.layout_elements())[0].unit == dim_text.unit
+        assert list(dim_text.arrangement_elements())[0].unit == dim_text.unit
         assert glyphs[0].shapes[0].unit == dim_text.unit
         assert len(glyphs[2]) == 0 and not glyphs[2].shapes
 
@@ -525,7 +525,7 @@ class TestDimGlyph:
         assert dim_glyph.advance_width.m_as('nm') == pytest.approx(1000 * text.glyphs[1].advance_width)
         assert dim_glyph.origin == Vector(*text.glyphs[1].origin) * unit('µm')
         assert all(isinstance(shape, DimShape) for shape in dim_glyph)
-        assert list(dim_glyph.layout_elements())[0].unit == dim_glyph.unit
+        assert list(dim_glyph.arrangement_elements())[0].unit == dim_glyph.unit
         assert repr(dim_glyph).startswith("DimGlyph('i', n_shapes=2")
 
     def test_invalid(self):

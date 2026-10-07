@@ -23,7 +23,7 @@ except ModuleNotFoundError as error:
 
 from fibomat.units import Q_, U_
 from fibomat.shapes import Shape, Rect, Circle, Polyline, Polygon, Polyline, Line, Ellipse
-from fibomat.layout import Group
+from fibomat.arrangements import Group
 from fibomat.linalg import mirror, translate, Vector, BoundingBox
 from fibomat.utils import PathLike
 

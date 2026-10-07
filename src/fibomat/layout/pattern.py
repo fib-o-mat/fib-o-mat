@@ -37,7 +37,7 @@ class Pattern(DimTransformable, Generic[DimTransformableT]):
 
         Args:
             dim_shape (Tuple[ShapeType, units.LengthUnit]):
-                tuple of a shape type and its length unit. ShapeType can be any transformable, e.g. a layout.Group or
+                tuple of a shape type and its length unit. ShapeType can be any transformable, e.g. an arrangements.Group or
                 shapes.Line, ...
             mill (Mill): mill object
             **kwargs: additional args

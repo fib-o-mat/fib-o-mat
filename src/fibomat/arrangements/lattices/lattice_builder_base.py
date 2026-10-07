@@ -6,9 +6,9 @@ from fibomat.linalg import (
     Vector,
     DimVector,
     VectorValueError,
-    TransformableBase,
+    Transformable,
 )
-from fibomat.layout.utils import _check_lattice_vectors
+from fibomat.arrangements.utils import _check_lattice_vectors
 
 
 class LatticeBuilderBase(abc.ABC):
@@ -64,7 +64,7 @@ class LatticeBuilderBase(abc.ABC):
 
         return key[0] * self._u + key[1] * self._v + self._offset
 
-    def __setitem__(self, key: Tuple[int, int], element: TransformableBase):
+    def __setitem__(self, key: Tuple[int, int], element: Transformable):
         if (
             not isinstance(key, tuple)
             or not len(key) == 2

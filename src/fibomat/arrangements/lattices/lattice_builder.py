@@ -1,7 +1,7 @@
 from typing import Optional
 
-from fibomat.layout.lattices.lattice_builder_base import LatticeBuilderBase
-from fibomat.layout.lattices.lattice import Lattice
+from fibomat.arrangements.lattices.lattice_builder_base import LatticeBuilderBase
+from fibomat.arrangements.lattices.lattice import Lattice
 from fibomat.linalg import VectorLike, Vector
 
 

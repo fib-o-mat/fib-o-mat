@@ -5,14 +5,14 @@ Provides the :class:`BackendBase` class.
 from typing import Dict, Callable, Type
 import inspect
 
-from fibomat.site import Site
-from fibomat.pattern import Pattern
+from fibomat.layout.site import Site
+from fibomat.layout.pattern import Pattern
 from fibomat import shapes, composite_shapes
 from fibomat.utils import PathLike
 from fibomat.backend.backendbasemeta import BackendBaseMeta
 from fibomat.rasterizedpattern import RasterizedPattern
 
-from fibomat import layout
+from fibomat import arrangements
 
 
 class ShapeNotSupportedError(TypeError):
@@ -103,7 +103,7 @@ class BackendBase(metaclass=BackendBaseMeta):
         """
         Add a pattern to the backend. The appropriate method is determined  by the pattern's shape class automatically.
 
-        If pattern contains a Layout, the contained shapes will be extracted automatically.
+        If pattern contains an arrangement (e.g. a Group or a Lattice), the contained shapes will be extracted automatically.
 
         Args:
             ptn (Pattern): pattern to be added.
@@ -129,10 +129,10 @@ class BackendBase(metaclass=BackendBaseMeta):
                         pass
                 self.process_unknown(extracted_ptn)
 
-        if isinstance(ptn.dim_shape, layout.LayoutBase):
-            # ptn.dim_shape[0]: layout.LayoutBase
-            for extracted_shape in ptn.dim_shape.layout_elements():
-                if isinstance(extracted_shape, layout.LayoutBase):
+        if isinstance(ptn.dim_shape, arrangements.ArrangementBase):
+            # ptn.dim_shape[0]: arrangements.ArrangementBase
+            for extracted_shape in ptn.dim_shape.arrangement_elements():
+                if isinstance(extracted_shape, arrangements.ArrangementBase):
                     self.process_pattern(
                         Pattern(
                             extracted_shape,
@@ -187,7 +187,7 @@ class BackendBase(metaclass=BackendBaseMeta):
 
     def process_site(self, new_site: Site) -> None:
         """
-        Adds a :class:`fibomat.site.Site` to the backend. Note, that this method processes all patterns contained in
+        Adds a :class:`fibomat.layout.site.Site` to the backend. Note, that this method processes all patterns contained in
         the site.
         Use the following example as reference, if a backend overwrites this method. ::
 

@@ -18,10 +18,10 @@ except ModuleNotFoundError as error:
 
 
 from fibomat.backend import BackendBase
-from fibomat.site import Site
+from fibomat.layout.site import Site
 from fibomat.units import U_, Q_, scale_factor
 from fibomat.utils import PathLike
-from fibomat.pattern import Pattern
+from fibomat.layout.pattern import Pattern
 from fibomat.shapes import Rect, Polygon, Circle, Spot, Line
 from fibomat.shapes.polyline import Polyline
 from fibomat.linalg import Vector, scale, translate

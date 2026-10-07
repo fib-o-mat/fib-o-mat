@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# from fibomat.sample import Sample
-# from fibomat.site import Site
-# from fibomat.pattern import Pattern
+# from fibomat.layout import Layout, Site, Pattern
 # from fibomat.mill import Mill, DDDMill, SILMill
 # from fibomat.linalg import Vector, DimVector
 from fibomat.units import DimFloat, unit

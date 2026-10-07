@@ -4,7 +4,7 @@ from typing import List, Tuple
 import numpy as np
 
 # from fibomat.shapes import Shape, DimShape
-# from fibomat.pattern import Pattern
+# from fibomat.layout.pattern import Pattern
 # from fibomat.linalg import Vector
 
 

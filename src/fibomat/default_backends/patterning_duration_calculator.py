@@ -6,7 +6,7 @@ from prettytable import PrettyTable
 
 from fibomat import shapes, composite_shapes
 from fibomat.backend.backendbase import BackendBase
-from fibomat.pattern import Pattern
+from fibomat.layout.pattern import Pattern
 from fibomat.raster_styles import one_d, two_d
 from fibomat.composite_shapes import HollowArcSpline, Ring
 from fibomat.shapes import (
@@ -14,7 +14,7 @@ from fibomat.shapes import (
     Ellipse,
     Shape,
 )
-from fibomat.site import Site
+from fibomat.layout.site import Site
 from fibomat.units import Q_
 
 

@@ -1,20 +1,24 @@
-"""Provides the :class:`Sample` class."""
+"""Provides the :class:`Layout` class."""
+from __future__ import annotations
 
 import dataclasses
 import re
-from typing import List, Optional, Set, Type, TypeVar, Union
+from typing import TYPE_CHECKING, List, Optional, Set, Type, TypeVar, Union
 
-from fibomat.backend import BackendBase, registry
-from fibomat.default_backends import BokehBackend, StubRasterStyle
+from fibomat.arrangements import ArrangementBase
 from fibomat.describable import Describable
-from fibomat.layout import LayoutBase
+from fibomat.layout.pattern import Pattern
+from fibomat.layout.site import Site
 from fibomat.linalg import DimVectorLike
 from fibomat.linalg.boundingboxes import boundingbox
 from fibomat.linalg.boundingboxes.dim_boundingbox import DimBoundingBox
-from fibomat.pattern import Pattern
 from fibomat.shapes import DimShape
-from fibomat.site import Site
 from fibomat.utils import PathLike
+
+if TYPE_CHECKING:  # pragma: no cover
+    # The backends depend on `Site` and `Pattern` of this package, hence, they are imported lazily (in the methods).
+    from fibomat.backend import BackendBase
+    from fibomat.default_backends import BokehBackend
 
 
 @dataclasses.dataclass(frozen=True)
@@ -28,12 +32,23 @@ class _Annotation:
 BackendType = TypeVar("BackendType")
 
 
-class Sample(Describable):
+def _registry():
+    """Return the backend registry (imported lazily because the backends depend on this package).
+
+    The default backends are imported, too, because this registers them.
+    """
+    # pylint: disable=import-outside-toplevel,unused-import
+    import fibomat.default_backends  # noqa: F401
+    from fibomat.backend import registry
+    return registry
+
+
+class Layout(Describable):
     """
     This class is the glueing between all subcomponents of the library.
-    All shapes and their milling settings are added to this class and can be exported with the help of registered
-    backends .
-
+    A layout is the pattern design for a sample: all shapes and their milling settings are added to this class (via
+    :class:`~fibomat.layout.site.Site` and :class:`~fibomat.layout.pattern.Pattern`) and can be exported with the help
+    of registered backends.
     """
 
     def __init__(self, *, description: Optional[str] = None):
@@ -53,10 +68,10 @@ class Sample(Describable):
         description: Optional[str] = None,
     ) -> Site:
         """
-        Creates and Site in-place (hence, the Site is automatically added to the sample). Patterns can be added to the
+        Creates and Site in-place (hence, the Site is automatically added to the layout). Patterns can be added to the
         returned object.
 
-        See :class:`fibomat.site.Site.__init__` for argument description.
+        See :class:`fibomat.layout.site.Site.__init__` for argument description.
 
         Returns:
             Site
@@ -76,8 +91,8 @@ class Sample(Describable):
         Returns:
             None
         """
-        if isinstance(site_like, LayoutBase):
-            for site_ in site_like.layout_elements():
+        if isinstance(site_like, ArrangementBase):
+            for site_ in site_like.arrangement_elements():
                 self._sites.append(site_)
         else:
             self._sites.append(site_like)
@@ -100,7 +115,7 @@ class Sample(Describable):
             return bbox
 
     def __iadd__(self, site_like):
-        """See :meth:`~Sample.add_site`."""
+        """See :meth:`~Layout.add_site`."""
         self.add_site(site_like)
         return self
 
@@ -135,7 +150,7 @@ class Sample(Describable):
                     exporter.process_site(site_)
 
             # if descriptions:
-            #    raise RuntimeError(f'Could not find sites with descriptions: {descriptions} in sample')
+            #    raise RuntimeError(f'Could not find sites with descriptions: {descriptions} in layout')
 
         return exporter
 
@@ -154,11 +169,15 @@ class Sample(Describable):
             filename (PathLike, optional): if filename is given, the plot is saved in this file. The file suffix should
                                            be `*.htm` or `*.html`, default to None
             `**kwargs`: parameters for the bokeh backend. These are directly passed to the __init__ method of the
-                        BokehBackend class. The title parameter is automatically set to the :attr:`Sample.description`
+                        BokehBackend class. The title parameter is automatically set to the :attr:`Layout.description`
 
         Returns:
             None
         """
+
+        from fibomat.default_backends import (  # pylint: disable=import-outside-toplevel
+            BokehBackend, StubRasterStyle
+        )
 
         plotter: BokehBackend = self._export(
             BokehBackend,
@@ -211,7 +230,7 @@ class Sample(Describable):
         """
 
         if isinstance(exp_backend, str):
-            exp_backend = registry.get(exp_backend)
+            exp_backend = _registry().get(exp_backend)
 
         return self._export(
             exp_backend, self._sites, description=self._description, **kwargs
@@ -221,7 +240,7 @@ class Sample(Describable):
         self, exp_backend: Union[str, Type[BackendBase]], **kwargs
     ) -> List[BackendBase]:
         """
-        Similar to :meth:`Project.export` but for each :class:`fibomat.site.Site` an individual backend instance is
+        Similar to :meth:`Layout.export` but for each :class:`fibomat.layout.site.Site` an individual backend instance is
         returned.
 
         This can be usefull if multiple sites are used within fibomat but the pattern system only supports one site at a
@@ -233,7 +252,7 @@ class Sample(Describable):
         backends: List[BackendBase] = []
 
         if isinstance(exp_backend, str):
-            exp_backend = registry.get(exp_backend)
+            exp_backend = _registry().get(exp_backend)
 
         for added_site in self._sites:
             backends.append(
@@ -270,7 +289,7 @@ class Sample(Describable):
             BackendBase
         """
         if isinstance(exp_backend, str):
-            exp_backend = registry.get(exp_backend)
+            exp_backend = _registry().get(exp_backend)
         return self._export(
             exp_backend,
             self._sites,

@@ -1,13 +1,30 @@
-"""
-The layout submodule provides tools to arrange :class:`fibomat.site.Site`, :class:`fibomat.pattern.Pattern` and
-:class:`fibomat.shapes.Shape`.
-"""
-from fibomat.layout.layoutbase import LayoutBase
-from fibomat.layout.groups.group import Group
-from fibomat.layout.groups.dim_group import DimGroup
-from fibomat.layout.lattices.lattice import Lattice
-from fibomat.layout.lattices.dim_lattice import DimLattice
-from fibomat.layout.lattices.lattice_builder import LatticeBuilder
-from fibomat.layout.lattices.dim_lattice_builder import DimLatticeBuilder
+"""Container classes of a pattern design.
 
-__all__ = ['LayoutBase', 'Lattice', 'DimLattice', 'Group', 'DimGroup', 'LatticeBuilder', 'DimLatticeBuilder']
+A :class:`Layout` (the pattern design for a sample) consists of :class:`Site` objects (a field of view at a position)
+which hold :class:`Pattern` objects (a shape with a mill and a raster style). A layout is exported with the help of
+registered backends.
+
+Example::
+
+    from fibomat.layout import Layout
+    from fibomat.linalg import DimVector
+    from fibomat.mill import Mill
+    from fibomat.raster_styles import one_d, ScanSequence
+    from fibomat.shapes import Line
+    from fibomat.units import unit
+
+    layout = Layout()
+    site = layout.create_site(DimVector(0 * unit('µm'), 0 * unit('µm')))
+    site.create_pattern(
+        Line((0, 0), (1, 0)) * unit('µm'),
+        Mill(1. * unit('ms'), 1),
+        one_d.Curve(0.25 * unit('µm'), ScanSequence.CONSECUTIVE)
+    )
+    exported = layout.export('spotlist', length_unit=unit('nm'), time_unit=unit('µs'))
+"""
+# `Site` and `Pattern` must be imported before `Layout` (`Layout` imports both of them).
+from fibomat.layout.pattern import Pattern
+from fibomat.layout.site import Site
+from fibomat.layout.layout import Layout
+
+__all__ = ['Layout', 'Site', 'Pattern']

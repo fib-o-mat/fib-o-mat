@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from turtle import width
 from typing import List, Optional, Union
 
 import numpy as np
 
-from fibomat import layout
+from fibomat import arrangements
 from fibomat.linalg import DimBoundingBox, DimTransformable, DimVector, DimVectorLike
 from fibomat.linalg.vectors.vector import Vector
 from fibomat.mill import MillBase
-from fibomat.pattern import Pattern
+from fibomat.layout.pattern import Pattern
 from fibomat.raster_styles.rasterstyle import RasterStyle
 from fibomat.shapes import DimShape
 
@@ -204,7 +203,7 @@ class Site(DimTransformable):
         **kwargs,
     ) -> Pattern:
         """Creates a pattern in-place (returned pattern is automatically added to the site).
-        The parameters are identical to the __init__method of the :class:`fibomat.pattern.Pattern` class.
+        The parameters are identical to the __init__method of the :class:`fibomat.layout.pattern.Pattern` class.
 
         Args:
             dim_shape:
@@ -222,8 +221,8 @@ class Site(DimTransformable):
         self.add_pattern(pattern)
         return pattern
 
-    def add_pattern(self, ptn: Union[Pattern, layout.LayoutBase]) -> None:
-        """Adds a :class:`fibomat.pattern.Pattern` or Layoutbase[Pattern] to the site.
+    def add_pattern(self, ptn: Union[Pattern, arrangements.ArrangementBase]) -> None:
+        """Adds a :class:`fibomat.layout.pattern.Pattern` or ArrangementBase[Pattern] to the site.
 
         Args:
             ptn (Pattern):  new pattern
@@ -231,14 +230,14 @@ class Site(DimTransformable):
         Returns:
             None
         """
-        if isinstance(ptn, layout.LayoutBase):
-            for extracted_pattern in ptn.layout_elements():
+        if isinstance(ptn, arrangements.ArrangementBase):
+            for extracted_pattern in ptn.arrangement_elements():
                 self._patterns.append(extracted_pattern)
         else:
             self._patterns.append(ptn)
 
-    def __iadd__(self, ptn: Union[Pattern, layout.LayoutBase]) -> Site:
-        """Adds a :class:`fibomat.pattern.Pattern` to the site.
+    def __iadd__(self, ptn: Union[Pattern, arrangements.ArrangementBase]) -> Site:
+        """Adds a :class:`fibomat.layout.pattern.Pattern` to the site.
         Identical to :meth:`add_pattern`
 
         Args:

@@ -4,9 +4,9 @@ import abc
 
 from frozenlist import FrozenList
 
-from fibomat.layout.layoutbase import LayoutBase
+from fibomat.arrangements.arrangementbase import ArrangementBase
 from fibomat.linalg import Transformable, DimTransformable, VectorLike, DimVectorLike, BoundingBox, DimBoundingBox
-# from fibomat.layout.utils import _have_same_type
+# from fibomat.arrangements.utils import _have_same_type
 
 
 ElementT = TypeVar('ElementT', Transformable, DimTransformable)
@@ -14,7 +14,7 @@ VectorT = TypeVar('VectorT', VectorLike, DimVectorLike)
 BBoxT = TypeVar('BBoxT', BoundingBox, DimBoundingBox)
 
 
-class GroupBase(LayoutBase[ElementT, VectorT, BBoxT], abc.ABC):
+class GroupBase(ArrangementBase[ElementT, VectorT, BBoxT], abc.ABC):
     def __init__(
         self,
         elements: List[ElementT],
@@ -25,7 +25,7 @@ class GroupBase(LayoutBase[ElementT, VectorT, BBoxT], abc.ABC):
 
         # TODO: make this works for different types (e.g. pattern, Dimgroup, ...)
         # if not _have_same_type(elements):
-        #     raise TypeError('Elements in a layout must have same (base) type.')
+        #     raise TypeError('Elements in an arrangement must have same (base) type.')
 
         self._elements: FrozenList[ElementT] = FrozenList(elements)
         self._elements.freeze()
@@ -40,7 +40,7 @@ class GroupBase(LayoutBase[ElementT, VectorT, BBoxT], abc.ABC):
     def elements(self):
         return self._elements
 
-    def _layout_elements(self) -> Iterator[ElementT]:
+    def _arrangement_elements(self) -> Iterator[ElementT]:
         for element in self._elements:
             yield element
 

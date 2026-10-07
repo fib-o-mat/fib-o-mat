@@ -6,7 +6,7 @@ import numpy as np
 
 import bokeh.palettes as bp
 
-from fibomat.pattern import Pattern
+from fibomat.layout.pattern import Pattern
 from fibomat import shapes, composite_shapes
 from fibomat.curve_tools import rasterize
 
