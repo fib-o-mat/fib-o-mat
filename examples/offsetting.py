@@ -11,22 +11,23 @@ from sympy import sin, cos
 
 import numpy as np
 
-from fibomat import Sample, Vector, U_
+from fibomat.layout import Layout
+from fibomat.linalg import Vector
+from fibomat.units import unit
 from fibomat import default_backends, shapes, curve_tools
 
-sample = Sample()
+sample = Layout()
 
 
 starfish = shapes.ParametricCurve.from_sympy_curve(
-    sympy.Curve([3*cos(t)+cos(t)*cos(5*t), 3*sin(t)+sin(t)*cos(5*t)], (t, 0, 2*np.pi)),
-    try_length_integration=False
+    sympy.Curve([3*cos(t)+cos(t)*cos(5*t), 3*sin(t)+sin(t)*cos(5*t)], (t, 0, 2*np.pi))
 ).to_arc_spline()
 
 
 # inflate
 inflate_site = sample.create_site(
-    dim_position=(-8, 0) * U_('µm'),
-    dim_fov=(14, 30) * U_('µm'),
+    dim_position=Vector(-8, 0) * unit('µm'),
+    dim_fov=Vector(14, 30) * unit('µm'),
     description='inflating'
 )
 
@@ -36,13 +37,13 @@ inflating_curve_1 = starfish.translated((0, 8))
 inflated_curves_1 = curve_tools.inflate(inflating_curve_1, 0.5, n_steps=5)
 for inflated in inflated_curves_1:
     inflate_site.create_pattern(
-        dim_shape=inflated * U_('µm'),
+        dim_shape=inflated * unit('µm'),
         mill=None,
         raster_style=default_backends.StubRasterStyle(1)
     )
 
 inflate_site.create_pattern(
-    dim_shape=inflating_curve_1 * U_('µm'),
+    dim_shape=inflating_curve_1 * unit('µm'),
     mill=None,
     raster_style=default_backends.StubRasterStyle(1)
 )
@@ -53,21 +54,21 @@ inflating_curve_2 = starfish.translated((0, -8))
 inflated_curves_2 = curve_tools.inflate(inflating_curve_2, 0.25, distance=2)
 for inflated in inflated_curves_2:
     inflate_site.create_pattern(
-        dim_shape=inflated * U_('µm'),
+        dim_shape=inflated * unit('µm'),
         mill=None,
         raster_style=default_backends.StubRasterStyle(1)
     )
 
 inflate_site.create_pattern(
-    dim_shape=inflating_curve_2 * U_('µm'),
+    dim_shape=inflating_curve_2 * unit('µm'),
     mill=None,
     raster_style=default_backends.StubRasterStyle(1)
 )
 
 # deflate
 deflate_site = sample.create_site(
-    dim_position=(8, 0) * U_('µm'),
-    dim_fov=(14, 30) * U_('µm'),
+    dim_position=Vector(8, 0) * unit('µm'),
+    dim_fov=Vector(14, 30) * unit('µm'),
     description='deflating'
 )
 
@@ -77,13 +78,13 @@ deflating_curve_1 = starfish.translated((0, 8))
 deflated_curves_1 = curve_tools.deflate(deflating_curve_1, 0.5)
 for deflated in deflated_curves_1:
     deflate_site.create_pattern(
-        dim_shape=deflated * U_('µm'),
+        dim_shape=deflated * unit('µm'),
         mill=None,
         raster_style=default_backends.StubRasterStyle(1)
     )
 
 deflate_site.create_pattern(
-    dim_shape=deflating_curve_1 * U_('µm'),
+    dim_shape=deflating_curve_1 * unit('µm'),
     mill=None,
     raster_style=default_backends.StubRasterStyle(1)
 )
@@ -94,15 +95,15 @@ deflating_curve_2 = starfish.translated((0, -8))
 deflated_curves_2 = curve_tools.deflate(deflating_curve_2, 0.25, distance=2)
 for deflated in deflated_curves_2:
     deflate_site.create_pattern(
-        dim_shape=deflated * U_('µm'),
+        dim_shape=deflated * unit('µm'),
         mill=None,
         raster_style=default_backends.StubRasterStyle(1)
     )
 
 deflate_site.create_pattern(
-    dim_shape=deflating_curve_2 * U_('µm'),
+    dim_shape=deflating_curve_2 * unit('µm'),
     mill=None,
     raster_style=default_backends.StubRasterStyle(1)
 )
 
-sample.plot(fullscreen=_fullscreen, legend=False, rasterize_pitch=0.001 * U_('µm'))
+sample.plot(fullscreen=_fullscreen, legend=False, rasterize_pitch=0.001 * unit('µm'))

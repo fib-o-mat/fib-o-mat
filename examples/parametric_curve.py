@@ -1,7 +1,8 @@
 import numpy as np
 
 from fibomat.shapes import ParametricCurve
-from fibomat import Sample, Q_, U_
+from fibomat.layout import Layout
+from fibomat.units import unit
 
 # sympy example
 
@@ -14,7 +15,8 @@ curve = sympy.Curve(
     (t, 0, 2*np.pi)
 )
 
-parametric_curve = ParametricCurve.from_sympy_curve(curve, try_length_integration=True)
+# all derivatives are calculated automatically from the sympy expressions
+parametric_curve = ParametricCurve.from_sympy_curve(curve)
 spline_from_sympy = parametric_curve.to_arc_spline(epsilon=.1)
 
 
@@ -58,17 +60,16 @@ def length(u_0, u_1):
     return length_impl(u_1) - length_impl(u_0)
 
 
-# bounding box is not required for now.
-# if curvature and length ar not given, these are calculated automatically. This may be inefficient.
+# if curvature and length are not given, these are calculated automatically. This may be inefficient.
 parametric_curve = ParametricCurve(
     f, df, d2f,
-    domain=(0, 1), bounding_box=None, curvature=curvature, length=length
+    domain=(0, 1), curvature=curvature, length=length
 )
 spline_manual = parametric_curve.to_arc_spline()
 
 # plot it
 
-s = Sample()
-s.add_annotation(spline_from_sympy.scaled(.5) * U_('µm'))
-s.add_annotation(spline_manual.translated((4, 0)) * U_('µm'))
-s.plot(rasterize_pitch=Q_('0.001 µm'))
+s = Layout()
+s.add_annotation(spline_from_sympy.scaled(.5) * unit('µm'))
+s.add_annotation(spline_manual.translated((4, 0)) * unit('µm'))
+s.plot(rasterize_pitch=0.001 * unit('µm'))

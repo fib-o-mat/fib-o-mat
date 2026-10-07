@@ -5,10 +5,13 @@ if 'sphinx-build' in sys.argv:
 else:
     _fullscreen = True
 
-from fibomat import Sample, Vector, U_
+from fibomat.layout import Layout
+from fibomat.linalg import Vector
+from fibomat.units import unit
 from fibomat import default_backends, shapes, curve_tools
+from fibomat.curve_tools import CombineMode
 
-sample = Sample()
+sample = Layout()
 
 c1 = shapes.ArcSpline.from_shape(shapes.Circle(r=1, center=(-.75, 0)))
 c2 = shapes.ArcSpline.from_shape(shapes.Circle(r=1, center=(.75, 0)))
@@ -16,62 +19,62 @@ c2 = shapes.ArcSpline.from_shape(shapes.Circle(r=1, center=(.75, 0)))
 
 # Union
 union_site = sample.create_site(
-    dim_position=(-2.5, 2.5) * U_('µm'),
-    dim_fov=(4, 4) * U_('µm'),
+    dim_position=Vector(-2.5, 2.5) * unit('µm'),
+    dim_fov=Vector(4, 4) * unit('µm'),
     description='Union'
 )
 
-union_curves = curve_tools.combine_curves(c1, c2, 'union')
-for curve in union_curves['remaining']:
+union_curves = curve_tools.combine_curves(c1, c2, CombineMode.UNION)
+for curve in union_curves.boundaries:
     union_site.create_pattern(
-        dim_shape=curve * U_('µm'),
+        dim_shape=curve * unit('µm'),
         mill=None,
         raster_style=default_backends.StubRasterStyle(2)
     )
 
 # Xor
 xor_site = sample.create_site(
-    dim_position=(2.5, 2.5) * U_('µm'),
-    dim_fov=(4, 4) * U_('µm'),
+    dim_position=Vector(2.5, 2.5) * unit('µm'),
+    dim_fov=Vector(4, 4) * unit('µm'),
     description='Xor'
 )
 
-xor_curves = curve_tools.combine_curves(c1, c2, 'xor')
-for curve in xor_curves['remaining']:
+xor_curves = curve_tools.combine_curves(c1, c2, CombineMode.XOR)
+for curve in xor_curves.boundaries:
     xor_site.create_pattern(
-        dim_shape=curve * U_('µm'),
+        dim_shape=curve * unit('µm'),
         mill=None,
         raster_style=default_backends.StubRasterStyle(2)
     )
 
 # Exclude
 exclude_site = sample.create_site(
-    dim_position=(-2.5, -2.5) * U_('µm'),
-    dim_fov=(4, 4) * U_('µm'),
+    dim_position=Vector(-2.5, -2.5) * unit('µm'),
+    dim_fov=Vector(4, 4) * unit('µm'),
     description='Exclude'
 )
 
-exclude_curves = curve_tools.combine_curves(c1, c2, 'exclude')
-for curve in exclude_curves['remaining']:
+exclude_curves = curve_tools.combine_curves(c1, c2, CombineMode.EXCLUDE)
+for curve in exclude_curves.boundaries:
     exclude_site.create_pattern(
-        dim_shape=curve * U_('µm'),
+        dim_shape=curve * unit('µm'),
         mill=None,
         raster_style=default_backends.StubRasterStyle(2)
     )
 
 # Intersect
 intersect_site = sample.create_site(
-    dim_position=(2.5, -2.5) * U_('µm'),
-    dim_fov=(4, 4) * U_('µm'),
+    dim_position=Vector(2.5, -2.5) * unit('µm'),
+    dim_fov=Vector(4, 4) * unit('µm'),
     description='Intersect'
 )
 
-intersect_curves = curve_tools.combine_curves(c1, c2, 'intersect')
-for curve in intersect_curves['remaining']:
+intersect_curves = curve_tools.combine_curves(c1, c2, CombineMode.INTERSECT)
+for curve in intersect_curves.boundaries:
     intersect_site.create_pattern(
-        dim_shape=curve * U_('µm'),
+        dim_shape=curve * unit('µm'),
         mill=None,
         raster_style=default_backends.StubRasterStyle(2)
     )
 
-sample.plot(fullscreen=_fullscreen, legend=False, rasterize_pitch=0.001 * U_('µm'))
+sample.plot(fullscreen=_fullscreen, legend=False, rasterize_pitch=0.001 * unit('µm'))

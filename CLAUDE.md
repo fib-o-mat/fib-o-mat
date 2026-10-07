@@ -16,7 +16,7 @@ fib-o-mat (`fibomat`) is a Python library for generating beam patterns for focus
 - Bokeh measure tool (TypeScript, `src/fibomat/default_backends/measuretool.ts`): after changing it run `python scripts/build_measuretool.py` (needs node), which compiles it with bokeh's compiler to `measuretool.js`. The compiled JS is committed, so node is not needed to create plots (a test checks that it belongs to the source). Plots are saved as self-contained HTML (bokehjs is embedded); `tests/test_bokeh_browser.py` checks them in headless chromium (needs `playwright` and a chromium executable, skipped otherwise).
 - Python files under `src/fibomat` are picked up by maturin automatically (no per-file build lists).
 - Version is bumped with `bump2version` (`.bumpversion.cfg`; updates `pyproject.toml` and `src/fibomat/__init__.py`).
-- Docs examples live in `docs/examples/` (`run_all.sh`); the docs are Sphinx (`docs/`). Note `docs/src/` is a tracked copy of `src/`; the real source is `src/`.
+- Example scripts live in `examples/`; the docs are Sphinx with pydata-sphinx-theme (`docs/`, build with `make html`, needs `pip install -e ".[docs,exporting,io]"`). Plots are embedded with the `fibomat-plot` directive (`docs/_ext/`), the API pages in `docs/api/` use `automodule`, and the version switcher list is `docs/_static/switcher.json`.
 
 ## Architecture
 
@@ -47,7 +47,7 @@ The package is being reworked step by step. The user names the files to touch in
 - Check the touched files for spelling errors (in comments, docstrings and identifiers) and fix them.
 - Add unit tests for each step. These replace the existing tests in `tests/`.
 - If a change breaks the public API, ask the user how to proceed before making it.
-- Do not touch `docs/` for now.
+- The docs were reworked; keep them in sync with API changes (user guide pages in `docs/user_guide/`).
 
 ## Repo notes
 

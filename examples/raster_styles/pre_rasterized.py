@@ -1,17 +1,20 @@
 import numpy as np
 
-from fibomat import Sample, U_, Q_, Mill
+from fibomat.layout import Layout
+from fibomat.linalg import Vector
+from fibomat.mill import Mill
+from fibomat.units import unit
 from fibomat import default_backends, shapes, curve_tools, raster_styles
 from fibomat.rasterizedpattern import RasterizedPattern
 
-sample = Sample()
+sample = Layout()
 
 rasterized_points_site = sample.create_site(
-    dim_position=(-1, 0) * U_('µm'),
-    dim_fov=(1, 1) * U_('µm')
+    dim_position=Vector(-1, 0) * unit('µm'),
+    dim_fov=Vector(1, 1) * unit('µm')
 )
 
-mill = Mill(dwell_time=Q_('1 ms'), repeats=5)
+mill = Mill(dwell_time=1 * unit('ms'), repeats=5)
 
 line = shapes.Line(start=(-.75, -.75), end=(.75, .75))
 
@@ -33,7 +36,7 @@ rasterized_ramp = shapes.RasterizedPoints(dwell_points, is_closed=False)
 # hence, the last spot has twice the dwell time of the first spot
 # the pattern is repeated 5 times because mill.repeats == 5
 rasterized_points_site.create_pattern(
-    dim_shape=rasterized_ramp * U_('µm'),
+    dim_shape=rasterized_ramp * unit('µm'),
     mill=mill,
     raster_style=raster_styles.zero_d.PreRasterized()
 )
@@ -41,8 +44,8 @@ rasterized_points_site.create_pattern(
 # ----------------------------------------------------------------------------------------------------------------------
 
 rasterized_pattern_site = sample.create_site(
-    dim_position=(1, 0) * U_('µm'),
-    dim_fov=(1, 1) * U_('µm')
+    dim_position=Vector(1, 0) * unit('µm'),
+    dim_fov=Vector(1, 1) * unit('µm')
 )
 
 # another approach is to call the rasterize method of the raster style manually.
@@ -51,9 +54,9 @@ rasterized_pattern_site = sample.create_site(
 # dimensioned position and well times
 # in this case, the 1-dim Curve raster style is used to manually rasterize the line
 rasterized_pattern = raster_styles.one_d.Curve(
-    pitch=Q_('50 nm'), scan_sequence=raster_styles.ScanSequence.BACKSTITCH
+    pitch=50 * unit('nm'), scan_sequence=raster_styles.ScanSequence.BACKSTITCH
 ).rasterize(
-    dim_shape=line * U_('µm'), mill=mill, out_length_unit=U_('µm'), out_time_unit=U_('µs')
+    dim_shape=line * unit('µm'), mill=mill, out_length_unit=unit('µm'), out_time_unit=unit('µs')
 )
 
 # access the units of rasterized_pattern

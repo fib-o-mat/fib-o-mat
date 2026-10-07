@@ -1,93 +1,87 @@
-Mill & rasterizing settings
-===========================
+Mill & rasterization settings
+=============================
 
-To create a complete :class:`~fibomat.pattern.Pattern`, a :class:`~fibomat.mill.mill.Mill` and
-:class:`~fibomat.raster_styles.rasterstyle.RasterStyle` must be defined along with a patterning shape.
+To create a complete :class:`~fibomat.layout.Pattern`, a :class:`~fibomat.mill.Mill` and a :class:`~fibomat.raster_styles.RasterStyle` must be defined along with a patterning shape.
 
 In a pattern, the following pieces of information are collected:
 
     1. what should be rasterized (geometric shape)
     2. in which way the shape should be rasterized (rasterization style, pitches)
-    3. how the rasterized shape should be milled (dwell time and current)
+    3. how the rasterized shape should be milled (dwell time and number of repeats)
 
 Defining a mill
 ---------------
-In the most simple case, the :class:`~fibomat.mill.mill.Mill` takes the patterning current and the number of total repeats of a shape as attributes. ::
 
-    from fibomat import Mill, Q_
+In the most simple case, the :class:`~fibomat.mill.Mill` takes the dwell time per spot and the number of repeats of a shape as attributes. ::
 
-    mill = Mill(current=Q_('1 pA'), repeats=5)
+    from fibomat.mill import Mill
+    from fibomat.units import unit
+
+    mill = Mill(dwell_time=1 * unit('ms'), repeats=5)
+
+The dwell time must be a dimensioned value with the dimension time and the number of repeats an integer which is at least 1. Both are available as properties (``mill.dwell_time``, ``mill.repeats``).
 
 |:test_tube:| Providing custom parameters to a mill object
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-This can be useful in combination with a custom exporting or custom rasterization styles.
+Backends and custom raster styles may need parameters which are not part of the :class:`~fibomat.mill.Mill`, e.g. the dose or the scan direction. For this, :class:`~fibomat.mill.MillBase` is the base class of all mills: it stores named settings which are read with ``mill['name']``. :class:`~fibomat.mill.SpecialMill` can be used to store arbitrary settings; own mill classes can be derived from :class:`~fibomat.mill.MillBase`. ::
 
-In the extending section, an example is given.
+    from fibomat.mill import SpecialMill
 
+    special_mill = SpecialMill(dwell_time=1 * unit('ms'), repeats=5, use_flood_gun=True, defocus=20)
 
-..    The mill object can also store custom settings. To add them to a Mill object, use the :meth:`~fibomat.mill.Mill.special_mill` classmethod.
-    In addition to the current and number of repeats, arbitrary other parameters can be passed to the Mill object. These are stored in the class an can be accessed in custom patterning backend (REF) for example. ::
+    # ...
 
-..        special_mill = Mill.special_mill(current=Q_('1 pA'), repeats=5, use_flood_gun=True, defocus=20)
+    # access the extra parameters at a later point
+    print(special_mill['use_flood_gun'])
+    print(special_mill['defocus'])
 
-..        # ...
+Reading a setting which does not exist (or is ``None``) raises a ``KeyError`` with a hint. In the section about extending fib-o-mat, an example is given.
 
-..        # access the extra parameters at a later point
-..        print(special_mill.use_flood_gun)
-        print(special_mill.defocus)
+.. note:: The raster styles and backends which are part of fib-o-mat need a :class:`~fibomat.mill.Mill` (a constant dwell time) or a mill which is derived from it. Mills with a position dependent dwell time (:class:`~fibomat.mill.DDDMill`, :class:`~fibomat.mill.SILMill`) are not supported yet.
 
-..    The example above illustrates how extra parameters can be passed and retrieved at a later stage (in this case the parameters 'use_flood_gun' and 'defocus').
+|:test_tube:| Defining an ion beam shape
+++++++++++++++++++++++++++++++++++++++++
 
-..    .. note:: All current implemented backends in fib-o-mat ignore all extra parameters.
+For dose calculations or optimization routines, for example, the beam shape must be known.
+For this, the fib-o-mat package provides the :class:`~fibomat.mill.GaussBeam` class. As the name indicates, this class describes the ion beam with a Gaussian shape. A custom beam profile is defined by deriving from :class:`~fibomat.mill.IonBeam`.
 
-..    |:test_tube:| Defining an ion beam shape
-  ++++++++++++++++++++++++++++++++++++++++
+A :class:`~fibomat.mill.GaussBeam` is defined by the full width at half maximum of the beam and the total beam current. ::
 
-    For dose calculation or the :func:`~fibomat.optimize.optimize` routine for example, the beam shape must be known.
-    For this, the fib-o-mat package provides the :class:`~fibomat.mill.ionbeam.GaussBeam` class. As the name indicates, this class describes the ion beam with a Gaussian shape. In the extending fib-o-mat section (REF) it is explained, how a custom beam profile is defined.
+    from fibomat.mill import GaussBeam
 
-    A GaussianBeam is defined by the full-width-half-maximum beam width and the total beam current. ::
+    beam = GaussBeam(fwhm=3 * unit('nm'), current=1 * unit('pA'))
 
-        from fibomat import mill
+The class provides some utility methods, which are explained in the code snippet below ::
 
-        beam = mill.GaussBeam(fwhm=Q_('3 nm'), current=Q_('1 pA'))
+    # returns the standard deviation of the distribution
+    print(beam.std)
 
-    The GaussianBeam class provides some utility methods which are explained in the code snipped below ::
+    # Calculate the ion flux at the position (0, 0) µm for spots at (-1, 0), (0, 0), (1, 0) µm,
+    # hence, the influence of the surrounding spots of the spot at (0, 0) is calculated.
+    fluxes, flux_unit = beam.flux_at((0, 0), [(-1, 0), (0, 0), (1, 0)], unit('µm'))
 
-        # returns the standard deviation of the distribution
-        print(beam.std)
+    # Calculate the ion flux of a single, isolated spot.
+    # This is the same as calling beam.flux_at((0, 0), (0, 0), unit('µm'))
+    print(beam.nominal_flux_per_spot())
 
-        # Calculate the ion flux at position (0, 0) µm with spots at (-1, 0), (0, 0), (1, 0) µm
-        # hence the influence of surrounding spots of the spot at (0, 0) is calculated.
-        print(beam.flux_at(
-            (0, 0),
-            [(-1, 0), (0, 0), (1, 0)],
-            U_('µm')
-        ))
+    # Calculate the ion flux of a spot on a line with the pitch 1 nm
+    print(beam.nominal_flux_per_spot_on_line(1 * unit('nm')))
 
-        # Calculate the ion flux of a single, isolated spot.
-        # this is the same as calling beam.flux_at((0, 0), (0, 0), U_('µm'))
-        print(beam.nominal_flux_per_spot())
+    # Calculate the ion flux of a spot on a rectangular grid with the pitches 1 nm and 1 nm in x and y direction, respectively.
+    print(beam.nominal_flux_per_spot_in_rect(1 * unit('nm'), 1 * unit('nm')))
 
-        # Calculate the ion flux of a spot on line with pitch 1 nm
-        print(beam.nominal_flux_per_spot_on_line(Q_('1nm))
-
-        # Calculate the ion flux of a spot on rectangle with pitches 1 nm, 1 nm in x and y directions, respectively.
-        print(beam.nominal_flux_per_spot_in_rect(Q_('1nm), Q_('1nm))
-
-
-    The ``nominal_flux_*`` methods can be used to calculate a nominal flux to be used in the optimization routine (see below here REF) or to calculate the ion dose on the regular rasterized line/grid.
+The ``nominal_flux_*`` methods can be used to calculate a nominal flux for optimization routines or to calculate the ion dose on a regularly rasterized line or grid.
 
 
 Specifying the rasterization style
 ----------------------------------
 
-The rasterization styles define, how a shape should be rasterized. For different dimensions, different raster styles are pre-defined. The creation of custom patterning style is explained elsewhere REF.
+The rasterization styles define how a shape is rasterized. Different raster styles are predefined for different dimensions. The creation of custom raster styles is explained in :doc:`extending/custom_raster_style`.
 
-The default rasterization styles in the fib-o-mat package are introduced in the following.
+The raster styles which are part of the fib-o-mat package are introduced in the following. The pitches of all raster styles are dimensioned values (e.g. ``50 * unit('nm')``), and ``scan_sequence`` is a member of :class:`~fibomat.raster_styles.ScanSequence` (or its string value, e.g. ``'serpentine'``).
 
-The subsection refer to examples in the git repository at `<https://gitlab.com/viggge/fib-o-mat/-/blob/master/examples/raster_styles>`__. These can be executed by
+The subsections refer to examples in the git repository at `<https://github.com/fib-o-mat/fib-o-mat/blob/main/examples/raster_styles>`__. The examples can be executed with
 
 .. code-block:: bash
 
@@ -95,25 +89,25 @@ The subsection refer to examples in the git repository at `<https://gitlab.com/v
 
 if the current directory is the root of the fib-o-mat repository. ``spot.py`` can be replaced by all other scripts in the ``examples/raster_styles`` directory. See also :ref:`ion beam simulation <user_guide/exporting_visualization:ion beam simulation>`.
 
-Zero-dim
-++++++++
+Zero-dimensional
+++++++++++++++++
 
-    - :class:`~fibomat.raster_styles.zero_d.singlespot.SingleSpot`
-    - :class:`~fibomat.raster_styles.zero_d.prerasterized.PreRasterized`
+    - :class:`~fibomat.raster_styles.zero_d.SingleSpot`
+    - :class:`~fibomat.raster_styles.zero_d.PreRasterized`
 
-Both zero-dimensional raster style do not take any parameters. These raster styles can only be used for :class:`~fibomat.shapes.spot.Spot`\ s and pre-rasterized objects (:class:`~fibomat.shapes.rasterizedpoints.RasterizedPoints` and :class:`~fibomat.rasterizedpattern.RasterizedPattern`), respectively.
+Both zero-dimensional raster styles do not take any parameters. These raster styles can only be used for :class:`~fibomat.shapes.Spot`\ s and pre-rasterized objects (:class:`~fibomat.shapes.RasterizedPoints`), respectively. A spot is exposed ``repeats`` times. For pre-rasterized points, the weight of each point is multiplied with the dwell time and the whole sequence is repeated ``repeats`` times.
 
 Examples:
-    * `single spots <https://gitlab.com/viggge/fib-o-mat/-/blob/master/examples/raster_styles/spot.py>`__
-    * |:test_tube:| `manual rasterization <https://gitlab.com/viggge/fib-o-mat/-/blob/master/examples/raster_styles/pre_rasterized.py>`__
+    * `single spots <https://github.com/fib-o-mat/fib-o-mat/blob/main/examples/raster_styles/spot.py>`__
+    * |:test_tube:| `manual rasterization <https://github.com/fib-o-mat/fib-o-mat/blob/main/examples/raster_styles/pre_rasterized.py>`__
 
-One-dim
-+++++++
+One-dimensional
++++++++++++++++
 
-The only raster style for 1-dim shapes is the :class:`~fibomat.raster_styles.one_d.curve.Curve` style.
-This style expects a pitch (distance between neighboring spots) and scan style. All three possible scan styles are visualized below.
+The only raster style for one-dimensional shapes is the :class:`~fibomat.raster_styles.one_d.Curve` style.
+This style expects a pitch (the distance between neighboring spots, measured along the curve) and a scan sequence. The first spot is the start of the curve. All three possible scan sequences are visualized below.
 
-.. list-table:: Available scan styles for 1-dim shapes.
+.. list-table:: Available scan sequences for one-dimensional shapes.
 
     * - .. figure:: /_static/consecutive_1d.png
             :height: 250px
@@ -125,24 +119,24 @@ This style expects a pitch (distance between neighboring spots) and scan style. 
             :height: 250px
 
 Examples:
-    * `all 1-dim styles <https://gitlab.com/viggge/fib-o-mat/-/blob/master/examples/raster_styles/one_dim.py>`__
+    * `all one-dimensional styles <https://github.com/fib-o-mat/fib-o-mat/blob/main/examples/raster_styles/one_dim.py>`__
 
-Two-dim
-+++++++
+Two-dimensional
++++++++++++++++
 
-fib-o-mat includes two different rasterizing methods of two-dim shapes (:class:`~fibomat.raster_styles.two_d.linebyline.LineByLine` and :class:`~fibomat.raster_styles.two_d.contour_parallel.ContourParallel`).
-Both rasterization styles fill a given shape with lines or curves. The ordering of these lines and curves is defined by a scan style.
-All available scan styles are shown below.
+fib-o-mat includes two different rasterization methods for two-dimensional shapes (:class:`~fibomat.raster_styles.two_d.LineByLine` and :class:`~fibomat.raster_styles.two_d.ContourParallel`).
+Both rasterization styles fill a given shape with lines or curves. The order of these lines and curves is defined by a scan sequence.
+All available scan sequences are shown below.
 
 
-:class:`~fibomat.raster_styles.two_d.linebyline.LineByLine` rasterization
-*************************************************************************
+:class:`~fibomat.raster_styles.two_d.LineByLine` rasterization
+****************************************************************
 
-The line-by-line rasterizing style rasterizes a closed shape by sweeping a line over it. This style is commonly supported in other (proprietary) patterning software.
+The line-by-line rasterization style rasterizes a closed shape by sweeping a line over it. This style is commonly supported by other (proprietary) patterning software.
 
-Details on the method can found at the description of the fill_with_lines method :ref:`here <fill with lines>`.
+Details on the method can be found in the description of the :func:`~fibomat.curve_tools.fill_with_lines` function, see :ref:`here <user_guide/geometric-shapes:fill with lines>`. Shapes with holes (:class:`~fibomat.composite_shapes.HollowArcSpline` and :class:`~fibomat.composite_shapes.Ring`) are supported.
 
-.. list-table:: Available scan styles for 2-dim shapes.
+.. list-table:: Available scan sequences for two-dimensional shapes.
 
     * - .. figure:: /_static/consecutive_2d.png
             :height: 250px
@@ -162,23 +156,28 @@ Details on the method can found at the description of the fill_with_lines method
       - .. figure:: /_static/back_stitch_2d.png
             :height: 250px
 
+The scan sequences in the figure above only define the order of the individual one-dimensional shapes which fill the two-dimensional shape.
+In the figure, the two-dimensional shape is a rectangle which is filled with lines.
+Hence, the two-dimensional rasterization styles also require a one-dimensional rasterization style as parameter (among others), which is used for the filling lines.
 
-The scan sequences in the figure above only define the ordering of the individual 1-dim shapes which fill the 2-dim shape.
-In the plot above, the 2-dim shape is a rectangle filled by 1-dim lines.
-Hence, the 2-dim rasterization styles require also a 1-dim rasterization style as parameter (among others) which will be used for the filling shapes.
+For a double serpentine, the directions of the lines alternate over the whole sequence, so the beam never has to jump between the end of a pass and the start of the next one.
 
 
-:class:`~fibomat.raster_styles.two_d.contour_parallel.ContourParallel` offset rasterization
-********************************************************************************************
+:class:`~fibomat.raster_styles.two_d.ContourParallel` offset rasterization
+***************************************************************************
 
-This style generate contour-parallel offsetted curves of the passed shape to rasterized it.
+This style generates contour-parallel offset curves of the passed shape to rasterize it.
 
-.. |:test_tube:| To decrease the influence of artifacts due to offsetting, this rasterizing styles supports optimizing of the rasterized dwell points. See the use case :ref:`Plasmonic tetramer antennas based on single-crystalline gold flakes` for an usage example of the optimization process.
+.. warning:: ``ContourParallel`` is an experimental feature, which is not reworked yet. It needs the optional dependency numba (``pip install "fibomat[experimental]"``); without it, a placeholder is used which raises an ``ImportError`` when it is instantiated.
+
+.. To decrease the influence of artifacts due to offsetting, this rasterization style supports optimizing the rasterized dwell points. See the use case :ref:`use_cases/plasmonic_antennas:plasmonic tetramer antennas based on single-crystalline gold flakes` for a usage example of the optimization process.
 
 
 Examples:
-    * `various LineByLine styles <https://gitlab.com/viggge/fib-o-mat/-/blob/master/examples/raster_styles/line_by_line.py>`__
-    * `various ContourParallel styles <https://gitlab.com/viggge/fib-o-mat/-/blob/master/examples/raster_styles/contour_parallel.py>`__
+    * `various LineByLine styles <https://github.com/fib-o-mat/fib-o-mat/blob/main/examples/raster_styles/line_by_line.py>`__
+    * `various ContourParallel styles <https://github.com/fib-o-mat/fib-o-mat/blob/main/examples/raster_styles/contour_parallel.py>`__
 
-.. * ContourParallel with optimizations: `<https://gitlab.com/viggge/fib-o-mat/-/blob/master/examples/raster_styles/contour_parallel_optimizations.py>`__
+Spirals
+*******
 
+The :class:`~fibomat.raster_styles.two_d.Spiral` style fills a shape with an Archimedean spiral (``Spiral(pitch, spiral_pitch, scan_sequence, direction)``): ``pitch`` is the distance between the spots on the spiral and ``spiral_pitch`` the distance between the arms. The ``direction`` is ``'outwards'``, ``'inwards'`` or ``'out-in'``. This style is not reworked yet.

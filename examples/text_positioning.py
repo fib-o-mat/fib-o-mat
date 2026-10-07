@@ -1,5 +1,6 @@
-from fibomat import Sample, U_
-from fibomat.shapes import Text
+from fibomat.layout import Layout
+from fibomat.units import unit
+from fibomat.composite_shapes import Text
 
 centered_at_origin = Text('centered at origin')
 centered_at_origin = centered_at_origin.translated(-centered_at_origin.center)
@@ -26,12 +27,12 @@ baseline_right_at_y_axis = baseline_right_at_y_axis.translated(
 )
 
 
-s = Sample()
+s = Layout()
 
-s.add_annotation(centered_at_origin * U_('µm'))
-s.add_annotation(baseline_centered_at_y_axis * U_('µm'))
-s.add_annotation(baseline_left_at_y_axis * U_('µm'))
-s.add_annotation(baseline_right_at_y_axis * U_('µm'))
+s.add_annotation(centered_at_origin * unit('µm'))
+s.add_annotation(baseline_centered_at_y_axis * unit('µm'))
+s.add_annotation(baseline_left_at_y_axis * unit('µm'))
+s.add_annotation(baseline_right_at_y_axis * unit('µm'))
 
 
 

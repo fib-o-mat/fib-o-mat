@@ -1,4 +1,4 @@
-<!--- some hacky stuff get everything working on gitlab and pypi --->
+<!--- some hacky stuff get everything working on github and pypi --->
 <div align="center">
 
 <img src="https://fib-o-mat.readthedocs.io/en/latest/_static/fibomat.png" width="50%" style="width: 50%; display: block; margin-left: auto; margin-right: auto;"  alt="fibomat logo" />
@@ -6,7 +6,7 @@
 
 fib-o-mat is a Python library to create beam patterns for focused ion beam instruments.
 
-Pattern geometries can be modeled directly in Python bsaed on (pre-)defined geometric primitives or importet from vector
+Pattern geometries can be modeled directly in Python based on (pre-)defined geometric primitives or imported from vector
 graphics. These can be equipped with beam and rasterizing settings and exported to microscope compatible files.
 
 fib-o-mat is by designed flexible and easily expandable. Hence, adding support for for different microscopes, custom
@@ -79,4 +79,3 @@ License
 The source code is licensed under the GNU General Public License v3.0. This includes everything besides the 'docs' folder and its content in the git repository. See LICENSE.txt for a copy of the license.
 
 The documentation is licensed under the Creative Commons Attribution 4.0 International. This includes everything in the 'docs' folder in the git repository and the documentation hosted at https://fib-o-mat.readthedocs.io/. A copy of the license is to be found at 'docs/LICENSE_DOCS.txt' in the git repository.
-

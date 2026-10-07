@@ -114,6 +114,20 @@ class TestPlotData:
         assert len(data(backend, ShapeType.NON_FILLED_CURVE)['x']) == 1
         assert not data(backend, ShapeType.FILLED_CURVE)['x']
 
+    def test_closed_curves_drawn_as_lines_are_closed(self):
+        # (the line has to return to its start, otherwise the last segment is missing in the plot)
+        backend = export((Rect(2, 2) * unit('µm'), curve_style()), (Circle(1.) * unit('µm'), curve_style()))
+        curves = data(backend, ShapeType.NON_FILLED_CURVE)
+        for x, y in zip(curves['x'], curves['y']):
+            assert (x[0], y[0]) == (x[-1], y[-1])
+        assert len(curves['x'][0]) == 5
+        # open curves are not closed
+        open_curve = export((Line((0, 0), (2, 1)) * unit('µm'), curve_style()))
+        assert data(open_curve, ShapeType.NON_FILLED_CURVE)['x'] == [[0., 2.]]
+        # filled polygons are closed by bokeh
+        filled = export((Rect(2, 2) * unit('µm'), area_style()))
+        assert len(data(filled, ShapeType.FILLED_CURVE)['x'][0][0][0]) == 4
+
     def test_open_arc_spline_with_area_style_is_a_curve(self):
         backend = export((ArcSpline([(0, 0, 0), (1, 0, 0), (1, 1, 0)], False) * unit('µm'), area_style()))
         assert len(data(backend, ShapeType.NON_FILLED_CURVE)['x']) == 1

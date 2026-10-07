@@ -67,11 +67,13 @@ io = ["svgelements", "ezdxf"]
 experimental = ["numba"]
 gui = ["pyqt5", "vispy"]
 docs = [
-    "setuptools",
-    "sphinx",
-    "recommonmark",
-    "pydata_sphinx_theme",
+    "sphinx>=7.3",
+    "pydata-sphinx-theme>=0.16",
+    "myst-parser",
+    "sphinx-copybutton",
+    "sphinx-design",
     "sphinxemoji",
+    "pyhershey",  # fonts of the Text shape, needed to run the examples
 ]
 testing = ["pytest", "pytest-coverage", "pytest-mock"]
 dev = ["bump2version", "twine"]

@@ -1,15 +1,15 @@
 import numpy as np
 
 from fibomat.raster_styles import RasterStyle
-from fibomat.units import LengthQuantity, has_length_dim, LengthUnit, TimeUnit, scale_to, scale_factor
-from fibomat.shapes import Shape, DimShape
+from fibomat.units import DimFloat, has_length_dim, LengthUnit, TimeUnit, scale_to, scale_factor
+from fibomat.shapes import DimShape
 from fibomat.mill import Mill
 from fibomat.rasterizedpattern import RasterizedPattern
 from fibomat.curve_tools import rasterize
 
 
 class ConsecutiveRamped(RasterStyle):
-    def __init__(self, pitch: LengthQuantity, ramp_start: float, ramp_end: float):
+    def __init__(self, pitch: DimFloat, ramp_start: float, ramp_end: float):
         """
         Raster style with ramped dwell times.
         The first spot will have dwell time ``mill.dwell_time * ramp_start`` and the last
@@ -17,7 +17,7 @@ class ConsecutiveRamped(RasterStyle):
 
 
         Args:
-            pitch (LengthQuantity): pitch of spots
+            pitch (DimFloat): pitch of spots, e.g. ``1 * unit('nm')``
             ramp_start (float): ramp start
             ramp_end (float): ramp end
         """
@@ -26,11 +26,12 @@ class ConsecutiveRamped(RasterStyle):
         self._pitch = pitch
 
         if ramp_start < 0 or ramp_end < 0:
-            raise ValueError('ramp_start and ramp_end must be greater than 0.')
+            raise ValueError('ramp_start and ramp_end must not be negative.')
 
         self._ramp_start = ramp_start
         self._ramp_end = ramp_end
 
+    @property
     def dimension(self) -> int:
         return 1
 
@@ -64,17 +65,19 @@ class ConsecutiveRamped(RasterStyle):
         )
 
 
-from fibomat import Sample, U_, Q_, Mill
+from fibomat.layout import Layout
+from fibomat.linalg import Vector
+from fibomat.units import unit
 from fibomat import shapes, default_backends
 
-s = Sample()
+s = Layout()
 site = s.create_site(
-    dim_position=(0, 0) * U_('µm'),
-    dim_fov=(1, 1) * U_('µm')
+    dim_position=Vector(0, 0) * unit('µm'),
+    dim_fov=Vector(1, 1) * unit('µm')
 )
 site.create_pattern(
-    dim_shape=shapes.Line((-.75, -.75), (.75, .75)) * U_('µm'),
-    mill=Mill(dwell_time=Q_('1 ms'), repeats=5),
-    raster_style=ConsecutiveRamped(pitch=Q_('1 nm'), ramp_start=1, ramp_end=np.pi)
+    dim_shape=shapes.Line((-.75, -.75), (.75, .75)) * unit('µm'),
+    mill=Mill(dwell_time=1 * unit('ms'), repeats=5),
+    raster_style=ConsecutiveRamped(pitch=1 * unit('nm'), ramp_start=1, ramp_end=np.pi)
 )
 s.export(default_backends.SpotListBackend).save('rasterized.txt')

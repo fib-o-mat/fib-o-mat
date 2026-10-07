@@ -174,23 +174,27 @@ class BokehSite:
             description=self._description(ptn),
         )
 
-    def _outline(self, curve: shapes.ArcSpline, unit: t.Any) -> np.ndarray:
+    def _outline(self, curve: shapes.ArcSpline, unit: t.Any, close: bool = False) -> np.ndarray:
         """Points of a polygon/polyline which approximates a curve, in plot coordinates.
 
         Args:
             curve (ArcSpline): curve in the length unit `unit`
             unit (LengthUnit): length unit of the curve
+            close (bool): if True, the first point is repeated at the end of a closed curve (needed to draw it as a
+                line; polygons are closed by bokeh).
 
         Returns:
             np.ndarray: points with shape (n, 2)
         """
         max_distance = scale_to(unit, self._rasterize_pitch)
         points = np.array(rasterize_with_const_error(curve, max_distance).points, dtype=float)
+        if close and curve.is_closed:
+            points = np.vstack((points, points[:1]))
         return points * scale_factor(self._plot_unit, unit) + np.asarray(self._center)
 
-    def _segmentize_pattern(self, ptn: Pattern) -> np.ndarray:
+    def _segmentize_pattern(self, ptn: Pattern, close: bool = False) -> np.ndarray:
         curve = shapes.ArcSpline.from_shape(ptn.dim_shape.shape)
-        return self._outline(curve, ptn.dim_shape.unit)
+        return self._outline(curve, ptn.dim_shape.unit, close)
 
     def spot(self, ptn: Pattern[shapes.Spot]) -> None:
         """Add a spot."""
@@ -206,7 +210,7 @@ class BokehSite:
 
     def non_filled_curve(self, ptn: Pattern) -> None:
         """Add a curve which is drawn as a line."""
-        points = self._segmentize_pattern(ptn)
+        points = self._segmentize_pattern(ptn, close=True)
 
         self._add_plot_data(
             shape_type=ShapeType.NON_FILLED_CURVE,

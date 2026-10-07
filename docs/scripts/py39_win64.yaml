@@ -1,5 +1,0 @@
-name: py39_win64
-channels:
-  - defaults/win-64
-dependencies:
-  - python=3.9

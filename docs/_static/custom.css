@@ -1,0 +1,19 @@
+/* embedded plots of the examples */
+iframe.fibomat-plot {
+    background-color: white;
+    border-radius: 4px;
+    margin: 0.5rem 0;
+}
+
+/* the logo is a wide wordmark: keep it small enough for the navigation bar */
+.navbar-brand img,
+.navbar-brand .logo__image {
+    height: 2rem;
+    width: auto;
+    max-height: 2rem;
+}
+
+/* the logo already contains the name, hide the additional title text next to it */
+.navbar-brand .logo__title {
+    display: none;
+}

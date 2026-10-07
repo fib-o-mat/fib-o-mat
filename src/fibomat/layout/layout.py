@@ -29,7 +29,7 @@ from fibomat.arrangements import ArrangementBase
 from fibomat.describable import Describable
 from fibomat.layout.pattern import Pattern
 from fibomat.layout.site import DEFAULT_FOV_SCALE, Site, _check_fov_scale
-from fibomat.linalg import DimBoundingBox, DimVectorLike
+from fibomat.linalg import DimBoundingBox, DimTransformable, DimVectorLike
 from fibomat.shapes import DimShape
 from fibomat.utils import PathLike
 
@@ -45,7 +45,7 @@ __all__ = ['Layout']
 @dataclasses.dataclass(frozen=True)
 class _Annotation:
     """A shape which is only plotted."""
-    dim_shape: DimShape
+    dim_shape: DimTransformable
     filled: bool
     color: t.Optional[str]
     description: t.Optional[str]
@@ -364,7 +364,7 @@ class Layout(Describable):
 
     def add_annotation(
         self,
-        dim_shape: DimShape,
+        dim_shape: DimTransformable,
         filled: bool = False,
         color: t.Optional[str] = None,
         description: t.Optional[str] = None,
@@ -373,16 +373,17 @@ class Layout(Describable):
         the exporting backends.
 
         Args:
-            dim_shape (DimShape): shape
+            dim_shape (DimTransformable): shape with a unit (a :class:`~fibomat.shapes.DimShape`, but also e.g. a
+                :class:`~fibomat.composite_shapes.DimText` or a :class:`~fibomat.arrangements.DimGroup`)
             filled (bool): If True, the shape is plotted filled (only possible if the shape is closed)
             color (str, optional): a color bokeh can understand
             description (str, optional): description
 
         Raises:
-            TypeError: Raised if `dim_shape` is no DimShape.
+            TypeError: Raised if `dim_shape` has no unit.
         """
-        if not isinstance(dim_shape, DimShape):
-            raise TypeError(f'dim_shape must be a DimShape (shape * unit), got {type(dim_shape).__name__}.')
+        if not isinstance(dim_shape, DimTransformable):
+            raise TypeError(f'dim_shape must have a unit (shape * unit), got {type(dim_shape).__name__}.')
 
         self._annotations.append(
             _Annotation(dim_shape=dim_shape, filled=bool(filled), color=color, description=description)

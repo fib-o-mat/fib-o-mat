@@ -11,12 +11,14 @@ import sympy
 from sympy.abc import t
 from sympy import sin
 
-from fibomat import Sample, Vector, U_
+from fibomat.layout import Layout
+from fibomat.linalg import Vector
+from fibomat.units import unit
 from fibomat import default_backends
-from fibomat import shapes
+from fibomat import composite_shapes, shapes
 
 
-all_shapes = Sample(description='All shapes')
+all_shapes = Layout(description='All shapes')
 
 mill = None
 
@@ -24,13 +26,13 @@ mill = None
 spot = shapes.Spot(position=(0, 0))
 
 spot_site = all_shapes.create_site(
-    dim_position=(0, 0) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(0, 0) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='Spot'
 )
 
 spot_site.create_pattern(
-    dim_shape=spot * U_('µm'),
+    dim_shape=spot * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(0)
 )
@@ -46,13 +48,13 @@ points = shapes.RasterizedPoints(
 )
 
 raster_site = all_shapes.create_site(
-    dim_position=(2.5, 0) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(2.5, 0) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='RasterizedPoints'
 )
 
 raster_site.create_pattern(
-    dim_shape=points * U_('µm'),
+    dim_shape=points * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(0)
 )
@@ -61,13 +63,13 @@ raster_site.create_pattern(
 line = shapes.Line(start=(-.5, -.5), end=(.5, .5))
 
 line_site = all_shapes.create_site(
-    dim_position=(5, 0) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(5, 0) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='Line'
 )
 
 line_site.create_pattern(
-    dim_shape=line * U_('µm'),
+    dim_shape=line * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(1)
 )
@@ -78,13 +80,13 @@ polyline = shapes.Polyline(
 )
 
 polyline_site = all_shapes.create_site(
-    dim_position=(0, -2.5) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(0, -2.5) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='Polyline'
 )
 
 polyline_site.create_pattern(
-    dim_shape=polyline * U_('µm'),
+    dim_shape=polyline * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(1)
 )
@@ -98,19 +100,19 @@ polygon_1 = shapes.Polygon(
 polygon_2 = shapes.Polygon.regular_ngon(n=6, radius=.35, center=(-.5, -.5))
 
 polygon_site = all_shapes.create_site(
-    dim_position=(2.5, -2.5) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(2.5, -2.5) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='Polygon'
 )
 
 polygon_site.create_pattern(
-    dim_shape=polygon_1 * U_('µm'),
+    dim_shape=polygon_1 * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(2)
 )
 
 polygon_site.create_pattern(
-    dim_shape=polygon_2 * U_('µm'),
+    dim_shape=polygon_2 * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(2)
 )
@@ -122,19 +124,19 @@ arc_2 = shapes.Arc.from_bulge((-.1, -.1), (-.1, -.2), 15)
 
 
 arc_site = all_shapes.create_site(
-    dim_position=(5, -2.5) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(5, -2.5) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='Arc'
 )
 
 arc_site.create_pattern(
-    dim_shape=arc_1 * U_('µm'),
+    dim_shape=arc_1 * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(1)
 )
 
 arc_site.create_pattern(
-    dim_shape=arc_2 * U_('µm'),
+    dim_shape=arc_2 * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(1)
 )
@@ -154,19 +156,19 @@ arc_spline_2 = shapes.ArcSpline(
 )
 
 arc_spline_site = all_shapes.create_site(
-    dim_position=(0, -5) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(0, -5) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='ArcSpline'
 )
 
 arc_spline_site.create_pattern(
-    dim_shape=arc_spline_1 * U_('µm'),
+    dim_shape=arc_spline_1 * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(2)
 )
 
 arc_spline_site.create_pattern(
-    dim_shape=arc_spline_2 * U_('µm'),
+    dim_shape=arc_spline_2 * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(1)
 )
@@ -176,8 +178,7 @@ arc_spline_site.create_pattern(
 
 # all derivatives are calculated automatically if sympy curves are used
 parametric_1 = shapes.ParametricCurve.from_sympy_curve(
-    curve=sympy.Curve([sin(3*np.pi*t), sin(2*np.pi*t)], (t, 0, 2)),
-    try_length_integration=False
+    curve=sympy.Curve([sin(3*np.pi*t), sin(2*np.pi*t)], (t, 0, 2))
 )
 parametric_1_as_arc_spline = parametric_1.to_arc_spline().scaled(.5).translated((-.5, -.5))
 
@@ -202,26 +203,24 @@ def d2f(t_):
         (-4*np.cos(2*t_) + 3 * np.sin(t_), -4*np.sin(2*t_) + 2*np.cos(t_))
     ).T
 
-parametric_2 = shapes.ParametricCurve(
-    f, df, d2f, (np.pi/2, 5*np.pi/2), None
-)
+parametric_2 = shapes.ParametricCurve(f, df, d2f, domain=(np.pi/2, 5*np.pi/2))
 
 parametric_2_as_arc_spline = parametric_2.to_arc_spline().translated((.6, .3))
 
 parametric_site = all_shapes.create_site(
-    dim_position=(2.5, -5) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(2.5, -5) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='ParametricCurve'
 )
 
 parametric_site.create_pattern(
-    dim_shape=parametric_1_as_arc_spline * U_('µm'),
+    dim_shape=parametric_1_as_arc_spline * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(1)
 )
 
 parametric_site.create_pattern(
-    dim_shape=parametric_2_as_arc_spline * U_('µm'),
+    dim_shape=parametric_2_as_arc_spline * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(1)
 )
@@ -230,13 +229,13 @@ parametric_site.create_pattern(
 rect = shapes.Rect(width=1.2, height=.9, theta=np.pi/3)
 
 rect_site = all_shapes.create_site(
-    dim_position=(5, -5) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(5, -5) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='Rect'
 )
 
 rect_site.create_pattern(
-    dim_shape=rect * U_('µm'),
+    dim_shape=rect * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(1)
 )
@@ -245,13 +244,13 @@ rect_site.create_pattern(
 circle = shapes.Circle(r=.8)
 
 circle_site = all_shapes.create_site(
-    dim_position=(0, -7.5) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(0, -7.5) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='Circle'
 )
 
 circle_site.create_pattern(
-    dim_shape=circle * U_('µm'),
+    dim_shape=circle * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(1)
 )
@@ -260,13 +259,13 @@ circle_site.create_pattern(
 ellipse = shapes.Ellipse(a=.6, b=1.1, theta=np.pi/4)
 
 ellipse_site = all_shapes.create_site(
-    dim_position=(2.5, -7.5) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(2.5, -7.5) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='Ellipse'
 )
 
 ellipse_site.create_pattern(
-    dim_shape=ellipse * U_('µm'),
+    dim_shape=ellipse * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(1)
 )
@@ -289,19 +288,19 @@ holes.append(shapes.Rect(width=.25, height=.25, theta=np.pi/4, center=(.15, -.15
 # note: we cannot add a fourth rect in the third quadrant. this would create a not simply connected shape which his not
 # supported.
 
-hollow_spline = shapes.HollowArcSpline(boundary=boundary, holes=holes)
+hollow_spline = composite_shapes.HollowArcSpline(boundary=boundary, holes=holes)
 
 hollow_spline_site = all_shapes.create_site(
-    dim_position=(5, -7.5) * U_('µm'),
-    dim_fov=(2, 2) * U_('µm'),
+    dim_position=Vector(5, -7.5) * unit('µm'),
+    dim_fov=Vector(2, 2) * unit('µm'),
     description='Ellipse'
 )
 
 hollow_spline_site.create_pattern(
-    dim_shape=hollow_spline * U_('µm'),
+    dim_shape=hollow_spline * unit('µm'),
     mill=mill,
     raster_style=default_backends.StubRasterStyle(2)
 )
 
 # plot all
-all_shapes.plot(rasterize_pitch=.001 * U_('µm'), legend=False, fullscreen=_fullscreen)
+all_shapes.plot(rasterize_pitch=.001 * unit('µm'), legend=False, fullscreen=_fullscreen)

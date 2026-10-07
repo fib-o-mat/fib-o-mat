@@ -1,5 +1,0 @@
-name: py38_win32
-channels:
-  - defaults/win-32
-dependencies:
-  - python=3.8

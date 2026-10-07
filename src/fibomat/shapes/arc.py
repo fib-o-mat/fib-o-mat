@@ -101,7 +101,7 @@ class Arc(Shape, ArcSplineCompatible):  # pylint: disable=too-many-public-method
         Args:
             start (VectorLike): start point
             end (VectorLike): end point
-            bulge (float): bulge value, positive for counterclockwise arcs (|bulge| > 1: more than a half circle)
+            bulge (float): bulge value, positive for counterclockwise arcs (``abs(bulge) > 1``: more than a half circle)
 
         Returns:
             Arc

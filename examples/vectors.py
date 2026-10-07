@@ -1,7 +1,6 @@
 import numpy as np
 
-from fibomat import Vector
-from fibomat.linalg import angle_between
+from fibomat.linalg import Vector, angle_between
 
 # Vector
 null_vector = Vector()
@@ -36,7 +35,7 @@ print(u.r, u.phi)  # prints 1, 3.14159
 print(v.length)  # prints out the norm (length) of the vector
 print(v.angle_about_x_axis)  # prints the angle of the vector and the positive x-axis. the result will be in [0, 2pi]
 
-print(u.close_to(v))  # returns True, if u is nearly v and otherwise False.
+print(u.close_to(v))  # returns True, if u is nearly v and otherwise False (here: False).
 
 print(angle_between(u, v))  # prints the angle between u and v
 

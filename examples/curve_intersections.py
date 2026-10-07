@@ -5,10 +5,12 @@ if 'sphinx-build' in sys.argv:
 else:
     _fullscreen = True
 
-from fibomat import Sample, Vector, U_
+from fibomat.layout import Layout
+from fibomat.linalg import Vector
+from fibomat.units import unit
 from fibomat import default_backends, shapes, curve_tools
 
-sample = Sample()
+sample = Layout()
 
 # curve intersections
 spline = shapes.ArcSpline(
@@ -22,29 +24,29 @@ lines = [
 ]
 
 curve_intersection_site = sample.create_site(
-    dim_position=(-1, 0) * U_('µm'),
-    dim_fov=(1.8, 1.8) * U_('µm'),
+    dim_position=Vector(-1, 0) * unit('µm'),
+    dim_fov=Vector(1.8, 1.8) * unit('µm'),
     description='curve intersections'
 )
 
 curve_intersection_site.create_pattern(
-    dim_shape=spline * U_('µm'),
+    dim_shape=spline * unit('µm'),
     mill=None,
     raster_style=default_backends.StubRasterStyle(1)
 )
 
 for line in lines:
     curve_intersection_site.create_pattern(
-        dim_shape=line * U_('µm'),
+        dim_shape=line * unit('µm'),
         mill=None,
         raster_style=default_backends.StubRasterStyle(1)
     )
 
     intersections = curve_tools.curve_intersections(spline, line)
 
-    for intersection in intersections['intersections']:
+    for intersection in intersections.points:
         curve_intersection_site.create_pattern(
-            dim_shape=shapes.Spot(intersection['pos']) * U_('µm'),
+            dim_shape=shapes.Spot(intersection.position) * unit('µm'),
             mill=None,
             raster_style=default_backends.StubRasterStyle(1)
         )
@@ -57,25 +59,25 @@ fish = shapes.ArcSpline.from_segments([
 fish = fish.translated(-fish.center)
 
 self_intersection_site = sample.create_site(
-    dim_position=(1, 0) * U_('µm'),
-    dim_fov=(1.8, 1.8) * U_('µm'),
+    dim_position=Vector(1, 0) * unit('µm'),
+    dim_fov=Vector(1.8, 1.8) * unit('µm'),
     description='self intersections'
 )
 
 self_intersection_site.create_pattern(
-    dim_shape=fish * U_('µm'),
+    dim_shape=fish * unit('µm'),
     mill=None,
     raster_style=default_backends.StubRasterStyle(1)
 )
 
 self_intersections = curve_tools.self_intersections(fish)
 
-for intersection in self_intersections['intersections']:
+for intersection in self_intersections:
     self_intersection_site.create_pattern(
-        dim_shape=shapes.Spot(intersection['pos']) * U_('µm'),
+        dim_shape=shapes.Spot(intersection.position) * unit('µm'),
         mill=None,
         raster_style=default_backends.StubRasterStyle(1)
     )
 
 
-sample.plot(fullscreen=_fullscreen, legend=False, rasterize_pitch=0.001 * U_('µm'))
+sample.plot(fullscreen=_fullscreen, legend=False, rasterize_pitch=0.001 * unit('µm'))

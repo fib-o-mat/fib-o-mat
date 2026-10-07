@@ -7,30 +7,32 @@ else:
 
 import numpy as np
 
-from fibomat import Sample, U_
-from fibomat import default_backends, shapes, curve_tools
+from fibomat.layout import Layout
+from fibomat.linalg import Vector
+from fibomat.units import unit
+from fibomat import composite_shapes, curve_tools, default_backends, shapes
 
 
-sample = Sample()
+sample = Layout()
 
 enclosing_rect = shapes.Rect(width=3.5, height=2.5, theta=0).to_arc_spline()
 
 
 rect_site = sample.create_site(
-    dim_position=(-2.5, 2.5) * U_('µm'),
-    dim_fov=(4, 4) * U_('µm'),
+    dim_position=Vector(-2.5, 2.5) * unit('µm'),
+    dim_fov=Vector(4, 4) * unit('µm'),
     description='Enclosing rectangular spline'
 )
 
 rect_site.create_pattern(
-    dim_shape=enclosing_rect * U_('µm'),
+    dim_shape=enclosing_rect * unit('µm'),
     mill=None,
     raster_style=default_backends.StubRasterStyle(2)
 )
 
 rect_filled_site = sample.create_site(
-    dim_position=(2.5, 2.5) * U_('µm'),
-    dim_fov=(4, 4) * U_('µm'),
+    dim_position=Vector(2.5, 2.5) * unit('µm'),
+    dim_fov=Vector(4, 4) * unit('µm'),
     description='Filling lines'
 )
 
@@ -39,7 +41,7 @@ rect_filling_lines = curve_tools.fill_with_lines(shape=enclosing_rect, pitch=.05
 for row in rect_filling_lines:
     for line in row:
         rect_filled_site.create_pattern(
-            dim_shape=line * U_('µm'),
+            dim_shape=line * unit('µm'),
             mill=None,
             raster_style=default_backends.StubRasterStyle(2)
         )
@@ -60,26 +62,26 @@ holes = [
     shapes.Circle(r=.25, center=(0.25, -.25)).to_arc_spline()
 ]
 
-hollow_spline = shapes.HollowArcSpline(
+hollow_spline = composite_shapes.HollowArcSpline(
     boundary=boundary_spline,
     holes=holes
 )
 
 arc_spline_site = sample.create_site(
-    dim_position=(-2.5, -2.5) * U_('µm'),
-    dim_fov=(4, 4) * U_('µm'),
+    dim_position=Vector(-2.5, -2.5) * unit('µm'),
+    dim_fov=Vector(4, 4) * unit('µm'),
     description='Enclosing arc spline'
 )
 
 arc_spline_site.create_pattern(
-    dim_shape=hollow_spline * U_('µm'),
+    dim_shape=hollow_spline * unit('µm'),
     mill=None,
     raster_style=default_backends.StubRasterStyle(2)
 )
 
 arc_spline_filled_site = sample.create_site(
-    dim_position=(2.5, -2.5) * U_('µm'),
-    dim_fov=(4, 4) * U_('µm'),
+    dim_position=Vector(2.5, -2.5) * unit('µm'),
+    dim_fov=Vector(4, 4) * unit('µm'),
     description='Filling lines'
 )
 
@@ -90,9 +92,9 @@ arc_spline_filling_lines = curve_tools.fill_with_lines(
 for row in arc_spline_filling_lines:
     for line in row:
         arc_spline_filled_site.create_pattern(
-            dim_shape=line * U_('µm'),
+            dim_shape=line * unit('µm'),
             mill=None,
             raster_style=default_backends.StubRasterStyle(2)
         )
 
-sample.plot(fullscreen=_fullscreen, legend=False, rasterize_pitch=0.001 * U_('µm'))
+sample.plot(fullscreen=_fullscreen, legend=False, rasterize_pitch=0.001 * unit('µm'))

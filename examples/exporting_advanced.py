@@ -2,7 +2,10 @@ from typing import Dict, Any
 
 import numpy as np
 
-from fibomat import Sample, U_, Mill, Q_
+from fibomat.layout import Layout
+from fibomat.linalg import Vector
+from fibomat.mill import Mill
+from fibomat.units import unit
 from fibomat import default_backends, shapes, raster_styles, utils, units
 
 
@@ -10,7 +13,7 @@ def custom_save_impl(filename: utils.PathLike, dwell_points: np.ndarray, paramet
     # fov is in units of length_unit
     fov = max(parameters["fov"].width, parameters["fov"].height)
 
-    base_dwell_time = units.scale_to(U_('µs'), parameters["base_dwell_time"])
+    base_dwell_time = units.scale_to(unit('µs'), parameters["base_dwell_time"])
 
     with open(filename, 'w') as fp:
         # first, write header data.
@@ -30,26 +33,26 @@ def custom_save_impl(filename: utils.PathLike, dwell_points: np.ndarray, paramet
         fp.write('END_DWELL_POINTS\n')
 
 
-s = Sample()
+s = Layout()
 site = s.create_site(
-    dim_position=(0, 0) * U_('µm'), dim_fov=(5, 5) * U_('µm')
+    dim_position=Vector(0, 0) * unit('µm'), dim_fov=Vector(5, 5) * unit('µm')
 )
 
-mill = Mill(dwell_time=Q_('1 ms'), repeats=4)
+mill = Mill(dwell_time=1 * unit('ms'), repeats=4)
 
 site.create_pattern(
-    dim_shape=shapes.Line((-2, -2), (2, 2)) * U_('µm'),
+    dim_shape=shapes.Line((-2, -2), (2, 2)) * unit('µm'),
     mill=mill,
     raster_style=raster_styles.one_d.Curve(
-        pitch=Q_('1 nm'),
+        pitch=1 * unit('nm'),
         scan_sequence=raster_styles.ScanSequence.CONSECUTIVE
     )
 )
 
 exported = s.export(
     default_backends.SpotListBackend,
-    base_dwell_time=Q_('0.1 µs'),
-    length_unit=U_('µm'),
+    base_dwell_time=0.1 * unit('µs'),
+    length_unit=unit('µm'),
     save_impl=custom_save_impl
 )
 

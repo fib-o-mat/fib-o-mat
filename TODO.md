@@ -88,3 +88,7 @@ Open points which are postponed on purpose.
   serpentine or spiral orders are needed.
 - `Lattice.elements_by_uv` and `points_uv` are calculated/copied on every access; cache them if lattices with very many
   elements are used in loops.
+- Docs: the scripts in `use_cases/` still use the old API (`Sample`, `U_`, ...); port them and embed their plots with `fibomat-plot`.
+- Docs: the pages for `ContourParallel`, `Spiral`, `fibomat.optimize` and `fibomat.from_file` are placeholders until these are reworked.
+- Docs: the plots are self-contained (about 1.2 MB each), so the built docs are large; consider sharing bokeh.js between plots.
+- Docs: the version switcher (`docs/_static/switcher.json`) must get an entry for every release.

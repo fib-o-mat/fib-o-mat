@@ -1,24 +1,45 @@
-from __future__ import annotations
+"""Example how to implement a new shape.
+
+A shape is a class derived from :class:`fibomat.shapes.Shape`. It has to provide its bounding box, its center, whether it
+is closed, and the methods which translate, rotate, scale and mirror it in-place (the public methods `translated`,
+`rotated`, ... are provided by the base class and work on copies).
+
+To be plotted (and exported by backends which support arc splines), the shape should convert itself to an arc spline
+(``to_arc_spline``) or, if it has holes, to a hollow arc spline (``to_hollow_arc_spline``). The ring of this example
+is a simplified version of :class:`fibomat.composite_shapes.Ring`.
+"""
+# Ignore the following lines. These are used to adjust the plot for the documentation.
+import sys
+if 'sphinx-build' in sys.argv:
+    _fullscreen = False
+else:
+    _fullscreen = True
+
 from typing import Optional
 
-from fibomat import shapes
-from fibomat import linalg
-from fibomat.linalg import boundingbox
+import numpy as np
 
-raise RuntimeError('Do not use this example!')
+from fibomat.composite_shapes import HollowArcSpline
+from fibomat.default_backends import StubRasterStyle
+from fibomat.layout import Layout
+from fibomat.linalg import BoundingBox, Vector, VectorLike
+from fibomat.shapes import Circle, Shape
+from fibomat.units import unit
 
 
-class Ring(Shape):
-    def __init__(self, inner_r: float, outer_r: float, center: Optional[linalg.VectorLike] = None, desc):
-        super().__init__()
+class MyRing(Shape):
+    def __init__(
+        self, inner_r: float, outer_r: float, center: Optional[VectorLike] = None, description: Optional[str] = None
+    ):
+        super().__init__(description)
 
         self._inner_r = float(inner_r)
         self._outer_r = float(outer_r)
 
-        if self._inner_r >= self._outer_r:
-            raise RuntimeError
+        if not 0 < self._inner_r < self._outer_r:
+            raise ValueError('0 < inner_r < outer_r is required.')
 
-        self._center = linalg.Vector(center) if center is not None else linalg.Vector(0, 0)
+        self._center = Vector(center) if center is not None else Vector(0, 0)
 
     @property
     def inner_r(self) -> float:
@@ -29,14 +50,14 @@ class Ring(Shape):
         return self._outer_r
 
     def __repr__(self) -> str:
-        return '{}(inner_r={!r}, outer_r={!r} center={!r})'.format(
+        return '{}(inner_r={!r}, outer_r={!r}, center={!r})'.format(
             self.__class__.__name__, self._inner_r, self._outer_r, self._center
         )
 
     @property
-    def bounding_box(self) -> boundingbox.BoundingBox:
-        return boundingbox.BoundingBox(
-            self._center-(self._outer_r, self._outer_r), self._center+(self._outer_r, self._outer_r)
+    def bounding_box(self) -> BoundingBox:
+        return BoundingBox(
+            self._center - (self._outer_r, self._outer_r), self._center + (self._outer_r, self._outer_r)
         )
 
     @property
@@ -44,34 +65,41 @@ class Ring(Shape):
         return True
 
     @property
-    def center(self) -> linalg.Vector:
-        return self._center.clone()
+    def center(self) -> Vector:
+        return self._center
 
-    def translate(self, trans_vec: linalg.VectorLike) -> Ring:
-        self._center += linalg.Vector(trans_vec)
-        return self
+    # The in-place transformations. They are called for a copy of the shape by the public methods (`translated`, ...).
+    def _impl_translate(self, trans_vec: Vector) -> None:
+        self._center = self._center + trans_vec
 
-    def simple_rotate(self, theta: float) -> None:
-        pass
+    def _impl_rotate(self, theta: float) -> None:
+        # the ring is rotated about the origin: only its center moves
+        self._center = self._center.rotated(theta)
 
-    def simple_scale(self, s: float) -> None:
-        s = float(s)
-        self._inner_r *= s
-        self._outer_r *= s
+    def _impl_scale(self, fac: float) -> None:
+        self._inner_r *= abs(fac)
+        self._outer_r *= abs(fac)
+        self._center = self._center * fac
+
+    def _impl_mirror(self, mirror_axis: Vector) -> None:
+        self._center = self._center.mirrored(mirror_axis)
+
+    # Backends (like the plotting backend) use this method if they do not know the shape.
+    def to_hollow_arc_spline(self) -> HollowArcSpline:
+        return HollowArcSpline(
+            Circle(self._outer_r, center=self._center).to_arc_spline(),
+            [Circle(self._inner_r, center=self._center).to_arc_spline()]
+        )
 
 
 # plot an example
 
-from fibomat import sample
-from fibomat import units
-from fibomat import pattern
+ring = MyRing(inner_r=1, outer_r=2)
 
-ring = Ring(inner_r=1, outer_r=2)
+ring_sample = Layout(description=f'{ring}')
 
-ring_sample = sample.Sample(f'{ring}')
+site = ring_sample.create_site(Vector(0, 0) * unit('µm'), dim_fov=Vector(5, 5) * unit('µm'))
 
-site = ring_sample.create_site(([0, 0], units.U_('µm')), dim_fov=([5, 5], units.U_('µm')))
+site.create_pattern(dim_shape=ring * unit('µm'), mill=None, raster_style=StubRasterStyle(2))
 
-site += pattern.Pattern(dim_shape=(ring, units.U_('µm')), mill=None, raster_style=None)
-
-ring_sample.plot(show=True)
+ring_sample.plot(fullscreen=_fullscreen, legend=False)

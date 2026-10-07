@@ -5,10 +5,10 @@ if 'sphinx-build' in sys.argv:
 else:
     _fullscreen = True
 
-from fibomat import Sample, Vector, U_
+from fibomat.layout import Layout
 from fibomat import default_backends, shapes, curve_tools
 
-sample = Sample()
+sample = Layout()
 
 # two_dim,LineByLine, conseq.
 

@@ -54,7 +54,7 @@ class DimLattice(LatticeMixin, DimGroup):
     """A group of elements with units at the points of a lattice (see :class:`~fibomat.arrangements.Lattice`).
 
     The coordinates of the lattice points which are passed to a callback that creates the elements are
-    :class:`~fibomat.linalg.DimVector`s.
+    :class:`DimVectors <fibomat.linalg.DimVector>`.
     """
 
     def __init__(
