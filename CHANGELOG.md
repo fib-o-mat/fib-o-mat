@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [0.7.1] - 2026-10-07
 
 ### Fixed
 - The Read the Docs build uses the latest Rust toolchain (the dependencies of the Rust extension need Rust >= 1.85).
