@@ -51,5 +51,4 @@ The package is being reworked step by step. The user names the files to touch in
 
 ## Repo notes
 
-- Untracked local clutter (`foo/`, `fibomat.tar.xz`, `.zed/`) is not part of the project.
 - `tests/stubs.py` holds mock `Transformable`/`DimShape` classes shared by the tests.
