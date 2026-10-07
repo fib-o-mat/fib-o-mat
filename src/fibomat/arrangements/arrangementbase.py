@@ -1,92 +1,50 @@
 """Provide the :class:`ArrangementBase` class."""
 from __future__ import annotations
-from typing import Optional, Iterator, TypeVar, Generic
+
 import abc
-
-from fibomat.linalg import (
-    Transformable, DimTransformable, VectorLike, DimVectorLike, BoundingBox, DimBoundingBox
-)
+import typing as t
 
 
-ElementT = TypeVar('ElementT', Transformable, DimTransformable)
-VectorT = TypeVar('VectorT', VectorLike, DimVectorLike)
-BBoxT = TypeVar('BBoxT', BoundingBox, DimBoundingBox)
+__all__ = ['ArrangementBase']
 
 
-class ArrangementBase(Generic[ElementT, VectorT, BBoxT], abc.ABC):
-    """
-    ABC for all arrangement related classes.
+ElementT = t.TypeVar('ElementT')
+VectorT = t.TypeVar('VectorT')
+BBoxT = t.TypeVar('BBoxT')
 
-    It can be used to arrange :class:`fibomat.layout.site.Site`, :class:`fibomat.layout.pattern.Pattern` and
-    :class:`fibomat.shapes.Shape`.
 
-    The saved elements are accessed via the :meth:`ArrangementBase.arrangement_elements` method which returns a
-    generator containing all included elements.
+class ArrangementBase(t.Generic[ElementT, VectorT, BBoxT], abc.ABC):
+    """Base class of all arrangements: objects which contain other objects (elements) and are transformed together
+    with them, e.g. :class:`~fibomat.arrangements.Group` and :class:`~fibomat.arrangements.Lattice`.
 
-    What kind of elements and how these are set must be specified in child classes.
+    An arrangement can be used to arrange :class:`~fibomat.layout.site.Site`, :class:`~fibomat.layout.pattern.Pattern`
+    and :class:`~fibomat.shapes.shape.Shape` objects. The elements are accessed via
+    :meth:`ArrangementBase.arrangement_elements`, which yields all elements (also those of nested arrangements).
 
+    What kind of elements are stored must be specified in the child classes.
     """
 
-    def __init__(self, description: Optional[str] = None):
+    def __init__(self, description: t.Optional[str] = None):
         """
         Args:
             description (str, optional): description
         """
-        super().__init__(description=description)
+        super().__init__(description=description)  # type: ignore[call-arg]  # (a Transformable follows in the MRO)
 
     @abc.abstractmethod
-    def _arrangement_elements(self) -> Iterator[ElementT]:
+    def _arrangement_elements(self) -> t.Iterator[ElementT]:
+        """The direct elements of the arrangement."""
         raise NotImplementedError
 
-    def arrangement_elements(self) -> Iterator[ElementT]:
-        """Access to the saved elements.
+    def arrangement_elements(self) -> t.Iterator[ElementT]:
+        """Access to the elements. Nested arrangements are resolved: only the elements which are no arrangements are
+        yielded.
 
         Yields:
-            Any: Type depends on saved element.
+            Any: the elements; the type depends on the stored elements.
         """
         for element in self._arrangement_elements():
             if isinstance(element, ArrangementBase):
-                for sub_element in element._arrangement_elements():  # pylint: disable=protected-access
-                    yield sub_element
+                yield from element.arrangement_elements()
             else:
                 yield element
-
-    # @property
-    # def pivot(self):
-    #     if self._pivot is not None:
-    #         if self._is_dimensioned:
-    #             return DimVector.create(self._pivot(self))
-    #         else:
-    #             return Vector(self._pivot(self))
-    #     return self.center
-    #
-    # @pivot.setter
-    # def pivot(self, value):
-    #     self._pivot = value
-    #
-    # @property
-    # def bounding_box(self) -> boundingbox.BoundingBox:
-    #     """Bounding box of shape (getter)
-    #
-    #     Access:
-    #         get
-    #
-    #     Returns:
-    #         BoundingBox
-    #
-    #     Raises:
-    #         RuntimeError: Raised if Arrangement object does not contain any elements
-    #     """
-    #     raise NotImplementedError
-    #
-    #     element_iter = self.arrangement_elements()
-    #
-    #     try:
-    #         bbox = next(element_iter).bounding_box
-    #     except StopIteration:
-    #         raise RuntimeError('Cannot calculate bounding box of empty Arrangement.')  # pylint: disable=raise-missing-from
-    #
-    #     for element in element_iter:
-    #         bbox = bbox.extended(element.bounding_box)
-    #
-    #     return bbox

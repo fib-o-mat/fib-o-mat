@@ -40,7 +40,6 @@ dependencies = [
     "sympy",
     "pint",
     "splipy",
-    "frozenlist",
     "jinja2",
     # pyhershey
 ]

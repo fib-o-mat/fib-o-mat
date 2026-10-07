@@ -62,3 +62,22 @@ Open points which are postponed on purpose.
 - FEI stream files: `round_hfw` rounds the horizontal field width to an integer µm at the end (`np.round` wraps the whole
   expression), although its comment says it rounds up to a quarter of the order of magnitude. This is kept, because it
   defines the file name and the pattern size of existing files; decide if it should round up instead.
+
+## What does "center" mean?
+
+- `center` is used for different things across the package, which has to be made consistent (one meaning, documented
+  in `Transformable.center`), because it decides where `rotated(..., origin='center')` and `scaled(..., origin='center')`
+  transform, and what `pivot` defaults to:
+  - the center of the bounding box (`ArcSpline`, `Rect`, `RasterizedPoints`, ...),
+  - the mean of the centers of the elements (`Group`, `DimGroup`, lattices),
+  - the position of the object itself (`Circle`, `Ellipse`, `Ring`: their center point; `Site`: the position of the
+    site, which is not the center of its patterns; `Spot`: its position),
+  - the mean of the vertices was the meaning for `ArcSpline` before it was changed to the bounding box.
+- Decide what the meaning is (e.g. always the center of the bounding box, with the "position" kept as a separate property
+  like `pivot` or `position`), check every `center` property and every use of `origin='center'` (including
+  `HollowArcSpline`, `Text`, `Glyph`, `Site`, `Pattern`, `Layout` and the backends, which use the center of shapes, e.g.
+  the step and repeat backend as rotation center), and add tests which state the meaning for every class.
+
+## Arrangements
+
+- (see "What does center mean?": the center of `Group` is the mean of the centers of the elements for now.)
