@@ -1,112 +1,169 @@
-"""Provide rasterization routines."""
+"""Provide rasterization routines.
+
+Example:
+    >>> from fibomat.shapes import Line
+    >>> from fibomat.curve_tools import rasterize
+    >>> rasterize(Line((0, 0), (1, 0)), 0.25).positions[:, 0].tolist()
+    [0.0, 0.25, 0.5, 0.75, 1.0]
+"""
 from __future__ import annotations
 
-from typing import List, Tuple, Optional, Dict, Any, Union, TYPE_CHECKING
+import math
+import typing as t
 
 import numpy as np
 
-import sympy
-from sympy.abc import t
-from sympy import sin, cos
-
-from fibomat.shapes.arc import Arc
-from fibomat.shapes.line import Line
+from fibomat import _libfibomat
+from fibomat.shapes._line_non_continuous import LineNonContinuous
+from fibomat.shapes.arc_spline import ArcSpline, ArcSplineCompatible
+from fibomat.shapes.parametric_curve import ParametricCurve
 from fibomat.shapes.polygon import Polygon
 from fibomat.shapes.polyline import Polyline
 from fibomat.shapes.rasterizedpoints import RasterizedPoints
 from fibomat.shapes.shape import Shape
-from fibomat.shapes.arc_spline import ArcSplineCompatible, ArcSpline
-from fibomat.linalg import Vector, translate, rotate, VectorLike, BoundingBox
-from fibomat.curve_tools.intersections import curve_intersections
-from fibomat.shapes._line_non_continuous import LineNonContinuous
-from fibomat import _libfibomat
-
-if TYPE_CHECKING:  # pragma: no cover
-    # (the composite shapes are imported lazily, they depend on this package)
-    from fibomat.composite_shapes.hollow_arc_spline import HollowArcSpline
 
 
-def _rasterize_arc_spline_non_continuous_curve(
-    curve: Union[ArcSpline, LineNonContinuous], pitch: float
-) -> RasterizedPoints:
-    # pylint: disable=invalid-name,too-many-locals
+__all__ = ['rasterize', 'rasterize_with_const_error']
 
+
+_RELATIVE_TOLERANCE = 1e-9
+"""Relative tolerance (with respect to the pitch) to decide if a point lies on the end of a curve."""
+
+
+def _check_pitch(pitch: float) -> float:
+    """Check that the pitch is positive and finite.
+
+    Args:
+        pitch (float): pitch
+
+    Returns:
+        float: pitch
+
+    Raises:
+        ValueError: Raised if pitch is not positive or not finite.
+    """
     pitch = float(pitch)
-    # n_points = int(curve.length / pitch) + 1
+    if not math.isfinite(pitch) or pitch <= 0.:
+        raise ValueError(f'pitch must be positive and finite, got {pitch}.')
+    return pitch
 
-    points = []
 
-    i_points = 0
-    offset = 0.
-    for segment in curve.segments:
-        if isinstance(segment, Arc):
-            arc: Arc = segment
+def _segment_arrays(curve: t.Union[ArcSpline, LineNonContinuous]) -> t.Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Start points, end points and bulge values of all segments of a curve.
 
-            offset_angle = offset / arc.radius
-            pitch_angle = pitch / arc.radius
+    Args:
+        curve (ArcSpline, LineNonContinuous): curve
 
-            if offset_angle <= arc.theta:
-                points_on_arc = int((arc.theta - offset_angle) / pitch_angle) + 1
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: start points (n, 2), end points (n, 2), bulges (n,)
+    """
+    if isinstance(curve, LineNonContinuous):
+        starts = np.array([np.asarray(line.start, dtype=float) for line in curve.segments]).reshape(-1, 2)
+        ends = np.array([np.asarray(line.end, dtype=float) for line in curve.segments]).reshape(-1, 2)
+        return starts, ends, np.zeros(len(starts))
 
-                if np.isclose((arc.theta - offset_angle) / pitch_angle - points_on_arc - 1, 0.):
-                    points_on_arc += 1
+    vertices = curve.vertices
+    if curve.is_closed:
+        return vertices[:, :2], np.roll(vertices[:, :2], -1, axis=0), vertices[:, 2]
+    return vertices[:-1, :2], vertices[1:, :2], vertices[:-1, 2]
 
-                if not arc.sweep_dir:
-                    pitch_angle *= -1.
-                    arc_start_angle = arc.start_angle - offset_angle
-                else:
-                    arc_start_angle = arc.start_angle + offset_angle
 
-                center = np.array(arc.center)
-                theta = pitch_angle*np.arange(points_on_arc)
+def _rasterize_segments(
+    starts: np.ndarray, ends: np.ndarray, bulges: np.ndarray, pitch: float, is_closed: bool
+) -> np.ndarray:
+    """Points with equal arc length distance on a chain of lines and arcs.
 
-                points.append(
-                    center + arc.radius * np.column_stack(
-                        (np.cos(theta + arc_start_angle), np.sin(theta + arc_start_angle))
-                    )
-                )
+    The chain is parametrized by the arc length of the concatenated segments (gaps between segments are ignored). The
+    first point is the start of the first segment. The end of the chain is only included if its arc length is a
+    multiple of the pitch. In the case of a closed chain, this point would coincide with the first point and is
+    dropped.
 
-                i_points += points_on_arc
-                offset = pitch - (arc.length - offset - (len(theta)-1) * pitch)
-            else:
-                offset -= arc.length
+    Args:
+        starts (np.ndarray): start points of the segments, shape (n, 2)
+        ends (np.ndarray): end points of the segments, shape (n, 2)
+        bulges (np.ndarray): bulge values of the segments, shape (n,)
+        pitch (float): arc length between the points
+        is_closed (bool): True if the chain is closed
 
-        elif isinstance(segment, Line):
-            line: Line = segment
-            if offset <= line.length:
-                direction = (line.end - line.start).normalized()
+    Returns:
+        np.ndarray: points with shape (m, 2)
 
-                start = line.start + direction * offset
+    Raises:
+        ValueError: Raised if the chain has no length.
+    """
+    chord_vec = ends - starts
+    chord = np.hypot(chord_vec[:, 0], chord_vec[:, 1])
 
-                points_on_line = int((line.length-offset) / pitch) + 1
+    keep = chord > 0.
+    starts, ends, bulges, chord_vec, chord = starts[keep], ends[keep], bulges[keep], chord_vec[keep], chord[keep]
+    if not len(chord):
+        raise ValueError('Cannot rasterize a curve without length.')
 
-                direction = np.array(direction)
-                start = np.array(start)
+    is_arc = bulges != 0.
+    # bulge = tan(sweep / 4)
+    sweep = 4. * np.arctan(bulges)
+    half_sweep = sweep / 2.
 
-                t = pitch * np.arange(points_on_line)
-                # points[i_points:i_points+points_on_line, :2] = start + np.repeat(t[None, :], 2, axis=0).T * direction
-                points.append(start + np.repeat(t[None, :], 2, axis=0).T * direction)
-                # points[i_points:i_points+points_on_line, 2] = 1.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        radius = np.where(is_arc, chord / (2. * np.abs(np.sin(half_sweep))), 0.)
+        # signed distance of the center from the chord midpoint (positive to the left of the chord)
+        center_distance = np.where(is_arc, chord / 2. / np.tan(half_sweep), 0.)
+    lengths = np.where(is_arc, radius * np.abs(sweep), chord)
 
-                i_points += points_on_line
-                offset = pitch - (line.length - t[-1] - offset)
-            else:
-                offset -= line.length
-        else:
-            raise RuntimeError(f'Cannot rasterize segment type {segment.__class__.__name__}')
+    normals = np.column_stack((-chord_vec[:, 1], chord_vec[:, 0])) / chord[:, np.newaxis]
+    centers = (starts + ends) / 2. + normals * center_distance[:, np.newaxis]
+    start_angles = np.arctan2(starts[:, 1] - centers[:, 1], starts[:, 0] - centers[:, 0])
 
-    # assert i_points == n_points
-    dwell_points = np.ones(shape=(i_points, 3))
-    dwell_points[:, :2] = np.concatenate(points)
+    cumulative = np.concatenate(([0.], np.cumsum(lengths)))
+    total = cumulative[-1]
 
-    return RasterizedPoints(dwell_points, curve.is_closed)
+    tolerance = _RELATIVE_TOLERANCE * pitch
+    n_points = int(np.floor((total + tolerance) / pitch)) + 1
+    arc_lengths = np.arange(n_points) * pitch
+    if is_closed and n_points > 1 and total - arc_lengths[-1] < tolerance:
+        arc_lengths = arc_lengths[:-1]
+
+    # a point between two segments belongs to the end of the first one (matters if the chain is not continuous)
+    index = np.clip(np.searchsorted(cumulative, arc_lengths, side='left') - 1, 0, len(lengths) - 1)
+    local = np.clip(arc_lengths - cumulative[index], 0., lengths[index])
+
+    directions = chord_vec[index] / chord[index, np.newaxis]
+    points = starts[index] + directions * local[:, np.newaxis]
+
+    arcs = is_arc[index]
+    if np.any(arcs):
+        i_arc = index[arcs]
+        angles = start_angles[i_arc] + np.sign(sweep[i_arc]) * local[arcs] / radius[i_arc]
+        points[arcs] = centers[i_arc] + radius[i_arc, np.newaxis] * np.column_stack((np.cos(angles), np.sin(angles)))
+
+    return points
+
+
+def _with_unit_dwell_time(points: np.ndarray, is_closed: bool) -> RasterizedPoints:
+    """Create RasterizedPoints with dwell time multiplicand 1.
+
+    Args:
+        points (np.ndarray): positions, shape (n, 2)
+        is_closed (bool): True if the points are the points of a closed curve
+
+    Returns:
+        RasterizedPoints
+    """
+    dwell_points = np.ones((len(points), 3))
+    dwell_points[:, :2] = points
+    return RasterizedPoints(dwell_points, is_closed)
 
 
 def rasterize(curve: Shape, pitch: float) -> RasterizedPoints:
-    """Rasterize the outline of a Shape with a given pitch uniformly.
+    """Rasterize the outline of a shape with a given pitch uniformly.
 
-    For this, the shape must be convertible to an ArcSpline or must have a `rasterize` method expecting the pitch as
-    input.
+    The distance of two consecutive points, measured along the curve, is `pitch`. The first point is the start of the
+    curve. The end of an open curve is only included if its distance to the start is a multiple of the pitch. A closed
+    curve does not contain its start point twice.
+
+    The shape must be an :class:`~fibomat.shapes.arc_spline.ArcSpline`, a
+    :class:`~fibomat.shapes.parametric_curve.ParametricCurve` or convertible to an ArcSpline (i.e. provide
+    ``to_arc_spline()``).
 
     Args:
         curve (Shape): curve
@@ -116,208 +173,55 @@ def rasterize(curve: Shape, pitch: float) -> RasterizedPoints:
         RasterizedPoints
 
     Raises:
-        ValueError: Raised if curve is no ArcSpline, ArcSplineCompatible or not have a `rasterize` method.
+        ValueError: Raised if the pitch is not positive and finite or the curve has no length.
+        TypeError: Raised if the shape cannot be rasterized.
     """
-    if isinstance(curve, ArcSpline) or isinstance(curve, LineNonContinuous):
-        return _rasterize_arc_spline_non_continuous_curve(curve, pitch)
+    pitch = _check_pitch(pitch)
 
-    if raster_method := getattr(curve, 'rasterize', None):
-        return raster_method(curve, pitch)
+    if isinstance(curve, ParametricCurve):
+        points = curve.rasterize_at(pitch)
+        is_closed = curve.is_closed
+        if is_closed and len(points) > 1 and np.linalg.norm(points[-1] - points[0]) < _RELATIVE_TOLERANCE * pitch:
+            points = points[:-1]
+        return _with_unit_dwell_time(points, is_closed)
 
-    if isinstance(curve, ArcSplineCompatible):
-        return _rasterize_arc_spline_non_continuous_curve(curve.to_arc_spline(), pitch)
+    if isinstance(curve, LineNonContinuous):
+        return _with_unit_dwell_time(_rasterize_segments(*_segment_arrays(curve), pitch, False), False)
 
-    raise ValueError(f'Cannot rasterize the passed object of type {curve.__class__}.')
+    if not isinstance(curve, ArcSpline):
+        if isinstance(curve, ArcSplineCompatible):
+            curve = curve.to_arc_spline()
+        else:
+            raise TypeError(f'Cannot rasterize the passed object of type {type(curve).__name__}.')
+
+    return _with_unit_dwell_time(
+        _rasterize_segments(*_segment_arrays(curve), pitch, curve.is_closed), curve.is_closed
+    )
 
 
-def rasterize_with_const_error(curve: ArcSpline, error: float) -> Union[Polyline, Polygon]:
-    """Convert a arc spline to polygon or polyline.
+def rasterize_with_const_error(curve: ArcSpline, error: float) -> t.Union[Polyline, Polygon]:
+    """Convert an arc spline to a polygon or polyline.
 
     Args:
-        curve: arc spline
-        error: maximum distance between curve an returned polyine/polygon
+        curve (ArcSpline): arc spline
+        error (float): maximum distance between the curve and the returned polyline/polygon (greater than 0).
 
     Returns:
         Polygon if arc spline is closed and polyline otherwise
+
+    Raises:
+        TypeError: Raised if curve is not an ArcSpline.
+        ValueError: Raised if error is not positive and finite.
     """
+    if not isinstance(curve, ArcSpline):
+        raise TypeError(f'curve must be an ArcSpline, got {type(curve).__name__}.')
+
+    error = float(error)
+    if not math.isfinite(error) or error <= 0.:
+        raise ValueError(f'error must be positive and finite, got {error}.')
 
     approx = ArcSpline(_libfibomat.convert_arcs_to_lines(curve.arc_spline_impl, error))
 
     if curve.is_closed:
         return Polygon(approx.vertices[:, :2])
-    else:
-        return Polyline(approx.vertices[:, :2])
-
-
-def _make_line(
-    curve: ArcSpline, intersection_interval: Tuple[Dict[str, Any], Dict[str, Any]], holes: List[ArcSpline]
-) -> Optional[Line]:
-    start = Vector(intersection_interval[0]['pos'])
-    end = Vector(intersection_interval[1]['pos'])
-
-    assert np.isclose(start.y, end.y)
-    assert end.x > start.x
-
-    midpoint = Vector((start.x + end.x) / 2, start.y)
-
-    if curve.contains(midpoint):
-        for hole in holes:
-            if hole.contains(midpoint):
-                return
-        return Line(start, end)
-
-
-def fill_with_lines(
-    shape: Union[ArcSpline, HollowArcSpline],
-    pitch: float,
-    alpha: float,
-    invert: bool,
-    seed: Optional[VectorLike] = None
-) -> List[List[Line]]:
-    """Fill a closed shape with lines which are rotated by `alpha`-
-
-    Args:
-        shape (Union[ArcSpline, HollowArcSpline]): closed curve to be filled
-        pitch (float): distance between lines
-        alpha (float): rotation angle of lines with respect to x-axis
-        invert (bool):
-
-
-    Returns:
-        List[ArcSpline]
-
-    Raises:
-        ValueError: Raised if angle < 0 or angle > pi.
-        NotImplementedError: Raised if some kind of singularities occur. This can be fixed (probably) if the shape is
-                             rotated.
-    """
-    # pylint: disable=invalid-name,too-many-locals
-
-    # TODO: cache spatial tree for intersection calculations
-
-    from fibomat.composite_shapes.hollow_arc_spline import HollowArcSpline  # pylint: disable=import-outside-toplevel
-
-    if isinstance(shape, ArcSpline):
-        curve = shape
-        if not curve.is_closed:
-            raise ValueError('ArcSpline is not closed.')
-        holes = []
-    elif isinstance(shape, HollowArcSpline):
-        curve = shape.boundary
-        holes = shape.holes
-    else:
-        raise TypeError(f'Shape must be ArcSpline or HollowArcSpline (got {type(shape)}).')
-
-    if not (-np.pi/2 <= alpha <= np.pi/2):
-        raise ValueError('alpha < -pi/2 or alpha > pi/2')
-
-    seed = (Vector(seed) - curve.center).rotated(-alpha) if seed is not None else Vector()
-    # seed = Vector(seed) if seed is not None else Vector()
-
-    center = curve.center
-
-    curve = curve.transformed(
-        translate(-center) | rotate(-alpha)
-    )
-
-    holes = list(map(lambda hole: hole.transformed(translate(-center) | rotate(-alpha)), holes))
-
-    extend = 2 * pitch  # 2 * pitch
-    bbox_curve = curve.bounding_box
-    bbox = BoundingBox(bbox_curve.lower_left - (extend, extend), bbox_curve.upper_right + (extend, extend))
-
-    bbox_left = bbox.lower_left.x
-    bbox_right = bbox.upper_right.x
-    bbox_top = pitch * (np.fix(bbox.upper_right.y / pitch)) + seed.y - pitch * np.fix(seed.y / pitch) # pitch * np.fix((bbox.upper_right.y - seed.y) / pitch)
-    bbox_bottom = bbox_top - bbox.height # pitch * np.fix((bbox.center.y - bbox.height / 2) / pitch)
-
-    height = np.abs(bbox_top - bbox_bottom)
-
-    y = np.arange(-height / 2, height / 2, pitch)
-
-    ny = len(y)
-
-    if invert:
-        intersection_line_base = ArcSpline([(bbox_left, bbox_bottom, 0), (bbox_right, bbox_bottom, 0)], False)
-        pitch = -pitch
-    else:
-        intersection_line_base = ArcSpline([(bbox_left, bbox_top, 0), (bbox_right, bbox_top, 0)], False)
-
-    fill_lines: List[List[Line]] = []
-
-    for i_y in range(ny):
-        intersection_line = intersection_line_base.translated((0, -i_y*pitch))
-
-        intersections = curve_intersections(curve, intersection_line)['intersections']
-
-        # ignore coincidences for now
-        # # TODO: handle case, if cl_inter contains coincidence
-        # assert len(cl_intersections['coincidences']) == 0
-
-        if len(intersections) > 1:
-            for hole in holes:
-                intersections.extend(curve_intersections(hole, intersection_line)['intersections'])
-
-            intersections_sorted = sorted(
-                intersections,
-                key=lambda intersection: intersection['pos'][0]
-            )
-
-            fill_line = []
-
-            for intersection_interval in zip(intersections_sorted, intersections_sorted[1:]):
-                if part_fill_line := _make_line(curve, intersection_interval, holes):
-                    fill_line.append(
-                        part_fill_line.transformed(
-                            translate(center) | rotate(alpha, origin=center)
-                        )
-                    )
-
-            if fill_line:
-                fill_lines.append(fill_line)
-
-    return fill_lines
-
-
-def fill_with_spiral(shape: Union[ArcSpline, HollowArcSpline], pitch: float) -> List[Arc]:
-    from fibomat.shapes import ParametricCurve  #TODO fix this (throws circular import if imported globally)
-    from fibomat import curve_tools
-    """Fill the circumcircle of the bounding box with an Archimedean spiral.
-
-    Args:
-        shape (Union[ArcSpline, HollowArcSpline]): closed curve to be filled
-        pitch (float): distance between spiral arms
-
-
-    Returns:
-        ParametricCurve: Spiral filling the circumscribed circle of the bounding box
-
-        
-    """
-    from fibomat.composite_shapes.hollow_arc_spline import HollowArcSpline  # pylint: disable=import-outside-toplevel
-
-    if isinstance(shape, ArcSpline):
-        curve = shape
-        if not curve.is_closed:
-            raise ValueError('ArcSpline is not closed.')
-    elif isinstance(shape, HollowArcSpline):
-        curve = shape.boundary  # TODO include holes
-    else:
-        raise TypeError(f'Shape must be ArcSpline or HollowArcSpline (got {type(shape)}).')
-    
-
-    center = curve.center 
-    bbox = curve.bounding_box
-    radius = np.linalg.norm(bbox.upper_right - bbox.center)  # radius circumscribed circle
-    
-    theta_max = radius/pitch + 2*np.pi
-
-    curve = sympy.Curve(
-    [t*pitch*cos(t)+center[0], t*pitch*sin(t)+center[1]],
-    (t, 0, theta_max)
-    )
-
-
-    parametric_curve = ParametricCurve.from_sympy_curve(curve, try_length_integration=False)
-    return parametric_curve
-
+    return Polyline(approx.vertices[:, :2])

@@ -45,7 +45,7 @@ def contours_of(shape):
 
 def is_simple(points):
     spline = Polygon(points).to_arc_spline()
-    return self_intersections(spline)['intersections'] == []
+    return self_intersections(spline) == []
 
 
 def signed_area(points):

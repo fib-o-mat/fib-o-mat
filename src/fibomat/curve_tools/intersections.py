@@ -1,55 +1,83 @@
-"""Provide the :func:`self_intersections` and  :func:`curve_intersections` function."""
+"""Provide the :func:`self_intersections` and :func:`curve_intersections` function.
 
-from typing import Dict, List, Any
+Example::
 
-from fibomat.shapes import ArcSpline
+    from fibomat.curve_tools import curve_intersections, self_intersections
+    from fibomat.shapes import Circle, Line
+
+    circle = Circle(r=1).to_arc_spline()
+    line = Line((-2, 0), (2, 0)).to_arc_spline()
+
+    points, overlaps = curve_intersections(circle, line)
+    for point in points:
+        point.position, point.index_1, point.index_2
+
+    self_intersections(circle)  # []
+"""
+from __future__ import annotations
+
+import typing as t
+
 from fibomat import _libfibomat
+from fibomat.curve_tools.results import CurveIntersections, Intersection, Overlap
+from fibomat.linalg import Vector
+from fibomat.shapes.arc_spline import ArcSpline
 
 
-def self_intersections(curve: ArcSpline) -> Dict[str, List[Dict[str, Any]]]:
-    """Self intersections of curve.
+__all__ = ['self_intersections', 'curve_intersections']
+
+
+def _check_curve(curve: t.Any, name: str) -> None:
+    if not isinstance(curve, ArcSpline):
+        raise TypeError(f'{name} must be an ArcSpline, got {type(curve).__name__}.')
+
+
+def self_intersections(curve: ArcSpline) -> t.List[Intersection]:
+    """Self intersections of a curve. Overlapping segments are not reported.
 
     Args:
         curve (ArcSpline): curve
 
     Returns:
-        Dict[str, List[Dict[str, Any]]]:
-            dict with key 'intersections'. 'intersections' contains list where each element is a dict with keys 'seg_1',
-            'seg_2', and 'pos' where the former two elements contain the indices of the segments where the intersection
-            occurs and the latter the position of the intersection.
+        List[Intersection]:
+            intersections. `index_1` and `index_2` are the indices of the two segments of the curve which intersect
+            (``index_1 <= index_2``).
+
+    Raises:
+        TypeError: Raised if `curve` is no ArcSpline.
     """
-    return {
-        'intersections': [
-            {'seg_1': s1, 'seg_2': s2, 'pos': pos} for s1, s2, pos in
-            _libfibomat.self_intersections(curve.arc_spline_impl)
-        ]
-    }
+    _check_curve(curve, 'curve')
+
+    return [
+        Intersection(Vector(position), min(index_1, index_2), max(index_1, index_2))
+        for index_1, index_2, position in _libfibomat.self_intersections(curve.arc_spline_impl)
+    ]
 
 
-def curve_intersections(curve_1: ArcSpline, curve_2: ArcSpline) -> Dict[str, List[Dict[str, Any]]]:
-    """Intersections between curves.
+def curve_intersections(curve_1: ArcSpline, curve_2: ArcSpline) -> CurveIntersections:
+    """Intersections between two curves.
+
+    Crossings, touching points and the end points of open curves lying on the other curve are reported as `points`.
+    Parts where the curves lie on each other are reported as `overlaps` (not as points).
 
     Args:
         curve_1 (ArcSpline): first curve
         curve_2 (ArcSpline): second curve
 
-    .. todo:: what is seg_1, seg_2 in coincidences?
-
     Returns:
-        Dict[str, List[Dict[str, Any]]]:
-            dict with key 'intersections' and 'coincidences'. 'intersections' contains list where each element is a dict
-            with keys 'seg_1', 'seg_2', and 'pos' where the former two elements contain the indices of the segments
-            where the intersection occurs and the latter the position of the intersection. 'coincidences' contains a
-            list where each element is a dict with keys 'seg_1', 'seg_2', 'start_pos' and 'end_pos'. 'start_pos' and
-            'end_pos' indicate the range where the two curves lie on each other.
-    """
-    intersection, coincidences = _libfibomat.curve_intersections(curve_1.arc_spline_impl, curve_2.arc_spline_impl)
+        CurveIntersections: named tuple ``(points, overlaps)`` of :class:`Intersection` and :class:`Overlap` lists.
 
-    return {
-        'intersections': [
-            {'seg_1': s1, 'seg_2': s2, 'pos': pos} for s1, s2, pos in intersection
+    Raises:
+        TypeError: Raised if one of the curves is no ArcSpline.
+    """
+    _check_curve(curve_1, 'curve_1')
+    _check_curve(curve_2, 'curve_2')
+
+    points, overlaps = _libfibomat.curve_intersections(curve_1.arc_spline_impl, curve_2.arc_spline_impl)
+
+    return CurveIntersections(
+        points=[Intersection(Vector(position), index_1, index_2) for index_1, index_2, position in points],
+        overlaps=[
+            Overlap(Vector(start), Vector(end), index_1, index_2) for index_1, index_2, start, end in overlaps
         ],
-        'coincidences': [
-            {'seg_1': s1, 'seg_2': s2, 'start_pos': start, 'end_pos': end} for s1, s2, start, end in coincidences
-        ]
-    }
+    )

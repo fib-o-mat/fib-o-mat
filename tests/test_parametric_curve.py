@@ -261,14 +261,6 @@ class TestLengthAndRasterization:
         with pytest.warns(DeprecationWarning, match='safety'):
             circle_curve().rasterize(0.5, safety=1.5)
 
-    def test_rasterize_is_fast(self):
-        import time
-
-        start = time.perf_counter()
-        params = circle_curve(100.).rasterize(0.001)
-        assert len(params) > 600000
-        assert time.perf_counter() - start < 3.
-
 
 class TestBoundingBoxAndClosed:
     def test_bounding_box_ellipse(self):

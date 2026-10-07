@@ -115,23 +115,23 @@ class HollowArcSpline(Shape):
         for hole in holes:
             excluded = combine_curves(boundary, hole, mode='exclude')
 
-            if not excluded['remaining']:
+            if not excluded.boundaries:
                 raise ValueError('The boundary lies inside of a hole.')
 
-            if excluded['subtracted']:
+            if excluded.holes:
                 # the hole is completely inside of the boundary
                 inner_holes.append(hole)
-            elif len(excluded['remaining']) > 1:
+            elif len(excluded.boundaries) > 1:
                 raise ValueError(
                     'Shape is not simply connected. '
                     'This is most likely caused by a hole cutting the shape in two or more pieces.'
                 )
-            elif _same_curve(excluded['remaining'][0], boundary):
+            elif _same_curve(excluded.boundaries[0], boundary):
                 # nothing was cut out of the boundary: the hole is not in the boundary at all
                 raise ValueError('A hole lies outside of the boundary.')
             else:
                 # the hole touches or intersects the boundary and is cut out of it
-                boundary = excluded['remaining'][0]
+                boundary = excluded.boundaries[0]
 
         return boundary, inner_holes
 
@@ -149,15 +149,15 @@ class HollowArcSpline(Shape):
                 if hole.bounding_box.overlaps_with(other.bounding_box):
                     union = combine_curves(hole, other, mode='union')
 
-                    if union['subtracted']:
+                    if union.holes:
                         raise ValueError(
                             'Shape is not simply connected. '
                             'This is most likely caused by holes which separate the shape in two or more parts.'
                         )
 
-                    if len(union['remaining']) == 1:
+                    if len(union.boundaries) == 1:
                         del queue[i]
-                        queue.append(union['remaining'][0])
+                        queue.append(union.boundaries[0])
                         merged = True
                         break
 

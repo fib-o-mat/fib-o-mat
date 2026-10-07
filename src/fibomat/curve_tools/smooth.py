@@ -1,382 +1,280 @@
-from typing import Union, Tuple
+"""Provide smoothing (rounding of corners) of arc splines.
+
+Example:
+    >>> import math
+    >>> from fibomat.shapes import Rect
+    >>> from fibomat.curve_tools import smooth
+    >>> square = Rect(2, 2).to_arc_spline()
+    >>> rounded = smooth(square, 0.5)
+    >>> len(rounded.kinks())
+    0
+    >>> round(rounded.area, 6) == round(4 - (4 - math.pi) * 0.25, 6)
+    True
+"""
+from __future__ import annotations
+
+import math
+import typing as t
 
 import numpy as np
 
-from fibomat.shapes.line import Line
-from fibomat.shapes.arc import Arc
 from fibomat.shapes.arc_spline import ArcSpline
-from fibomat.curve_tools.intersections import curve_intersections
-from fibomat.curve_tools.offset import offset_with_islands, offset
-from fibomat.linalg import angle_between, Vector
-from fibomat.linalg.helpers import GeomLine
-from fibomat.utils.math import mod_2pi
 
+
+__all__ = ['smooth', 'NonSmoothableError']
 
 
 class NonSmoothableError(RuntimeError):
-    """"""
+    """Raised if a kink of a curve cannot be replaced by an arc of the requested radius.
+
+    This happens, e.g., if the radius is too large for the adjacent segments or if the curve turns back on itself.
+    """
 
 
-def make_tangent_vector(start: np.ndarray, end: np.ndarray):
-    tangent = np.asarray(end - start, dtype=float)
-    tangent /= np.linalg.norm(tangent)
-
-    return tangent
+_NEWTON_ITERATIONS = 100
+_TOLERANCE = 1e-12
+"""Relative tolerance."""
 
 
-def make_normal_vector(other: np.ndarray):
-    normal = np.array((-other[1], other[0]))
+class _Segment:
+    """A line or an arc of a curve, parametrized by arc length."""
 
-    return normal
+    # pylint: disable=too-many-instance-attributes
 
+    def __init__(self, start: np.ndarray, end: np.ndarray, bulge: float):
+        """
+        Args:
+            start (np.ndarray): start point
+            end (np.ndarray): end point
+            bulge (float): bulge value (0 for lines)
+        """
+        self.start = start
+        self.end = end
+        self.bulge = bulge
 
-def intersection_on_arc(arc: Arc, intersection: np.ndarray):
-    intersection_angle = Vector(intersection - arc.center).angle_about_x_axis
+        chord_vec = end - start
+        chord = float(math.hypot(chord_vec[0], chord_vec[1]))
+        if chord == 0.:
+            raise NonSmoothableError('The curve contains a segment without length.')
 
-    norm_intersection_angle = mod_2pi(intersection_angle - arc.start_angle)
-    norm_end_arc_angle = mod_2pi(arc.end_angle - arc.start_angle)
-
-    if not arc.sweep_dir:
-        return 0. <= norm_end_arc_angle <= norm_intersection_angle
-    else:
-        return 0. <= norm_intersection_angle <= norm_end_arc_angle
-
-
-def intersection_on_line(line: Line, intersection: np.ndarray):
-    geom_line = GeomLine(direction=line.end-line.start, support=line.start)
-
-    return 0. <= geom_line.find_param(intersection) <= 1.
-
-
-def arc_arc_intersection(arc_0: Arc, arc_1: Arc):
-    c_0, r_0 = arc_0.center, arc_0.radius
-    c_1, r_1 = arc_1.center, arc_1.radius
-
-    c_0 = np.array(c_0)
-    c_1 = np.array(c_1)
-
-    d = np.linalg.norm(c_0 - c_1)
-
-    if d > r_0 + r_1:
-        raise RuntimeError('No intersection (d > r_0 + r_1)')
-    elif d < abs(r_0 - r_1):
-        raise RuntimeError('No intersection (d < abs(r_0 - r_1))')
-    elif np.isclose(d, 0.) and np.isclose(r_0, r_1):
-        raise RuntimeError('No intersection (arcs are identical)')
-    else:
-        a = (r_0**2 - r_1**2 + d**2) / (2 * d)
-
-        h = np.sqrt(r_0**2 - a**2)
-
-        c = c_0 + a * (c_1 - c_0) / d
-
-        p_1 = np.array([
-            c[0] + h * (c_1[1] - c_0[1]) / d,
-            c[1] - h * (c_1[0] - c_0[0]) / d
-        ])
-
-        p_2 = np.array([
-            c[0] - h * (c_1[1] - c_0[1]) / d,
-            c[1] + h * (c_1[0] - c_0[0]) / d
-        ])
-
-        if np.allclose(p_1, p_2):
-            intersection = p_1
+        self.is_arc = bulge != 0.
+        if self.is_arc:
+            sweep = 4. * math.atan(bulge)
+            self.direction = 1. if sweep > 0. else -1.
+            self.radius = chord / (2. * abs(math.sin(sweep / 2.)))
+            self.length = self.radius * abs(sweep)
+            normal = np.array((-chord_vec[1], chord_vec[0])) / chord
+            self.center = (start + end) / 2. + normal * (chord / 2. / math.tan(sweep / 2.))
+            self.start_angle = math.atan2(start[1] - self.center[1], start[0] - self.center[0])
+            self.curvature = self.direction / self.radius
         else:
-            if intersection_on_arc(arc_0, p_1) and intersection_on_arc(arc_1, p_1):
-                intersection = p_1
-            elif intersection_on_arc(arc_0, p_2) and intersection_on_arc(arc_1, p_2):
-                intersection = p_2
-            else:
-                raise NonSmoothableError
+            self.direction = 0.
+            self.radius = math.inf
+            self.length = chord
+            self.unit = chord_vec / chord
+            self.curvature = 0.
 
-        return intersection
+    def angle(self, s: float) -> float:
+        """Polar angle (about the center) of the point at arc length `s` (arcs only)."""
+        return self.start_angle + self.direction * s / self.radius
+
+    def point(self, s: float) -> np.ndarray:
+        """Point at arc length `s`."""
+        if not self.is_arc:
+            return self.start + self.unit * s
+        angle = self.angle(s)
+        return self.center + self.radius * np.array((math.cos(angle), math.sin(angle)))
+
+    def tangent(self, s: float) -> np.ndarray:
+        """Unit tangent at arc length `s`."""
+        if not self.is_arc:
+            return self.unit
+        angle = self.angle(s)
+        return self.direction * np.array((-math.sin(angle), math.cos(angle)))
+
+    def trimmed_bulge(self, trim_start: float, trim_end: float) -> float:
+        """Bulge value of the segment after cutting `trim_start` from its start and `trim_end` from its end."""
+        if not self.is_arc:
+            return 0.
+        remaining = max(self.length - trim_start - trim_end, 0.)
+        return math.tan(math.atan(self.bulge) * remaining / self.length)
 
 
-# http://paulbourke.net/geometry/circlesphere/
-def arc_line_intersection(arc: Arc, line: Line):
-    x_1 = line.start.x
-    x_2 = line.end.x
-    x_3 = arc.center.x
+def _left_normal(tangent: np.ndarray) -> np.ndarray:
+    return np.array((-tangent[1], tangent[0]))
 
-    y_1 = line.start.y
-    y_2 = line.end.y
-    y_3 = arc.center.y
 
-    r = arc.radius
+def _cross(first: np.ndarray, second: np.ndarray) -> float:
+    return float(first[0] * second[1] - first[1] * second[0])
 
-    a = (x_2 - x_1)**2 + (y_2 - y_1)**2
-    b = 2 * ((x_2 - x_1) * (x_1 - x_3) + (y_2 - y_1) * (y_1 - y_3))
-    c = x_3**2 + y_3**2 + x_1**2 + y_1**2 - 2 * (x_3*x_1 + y_3*y_1) - r**2
 
-    discr = b**2 - 4 * a * c
+class _Fillet(t.NamedTuple):
+    """Arc replacing a kink."""
 
-    if discr < 0:
-        raise RuntimeError
-    elif np.isclose(discr, 0):
-        raise RuntimeError
+    trim_incoming: float
+    """Length cut from the end of the incoming segment."""
+    trim_outgoing: float
+    """Length cut from the start of the outgoing segment."""
+    start: np.ndarray
+    """Start point (on the incoming segment)."""
+    end: np.ndarray
+    """End point (on the outgoing segment)."""
+    bulge: float
+    """Bulge value of the fillet arc."""
+
+
+def _make_fillet(incoming: _Segment, outgoing: _Segment, radius: float) -> _Fillet:
+    """Compute the fillet of radius `radius` which is tangent to two segments meeting at a kink.
+
+    The center of the fillet has the distance `radius` to both segments, hence, it is a point of both offset
+    curves ``P(s) + side * radius * N(s)`` (N: left normal). The intersection of these offset curves is found with
+    Newton's method, starting at the solution for two lines.
+
+    Args:
+        incoming (_Segment): segment ending at the kink
+        outgoing (_Segment): segment starting at the kink
+        radius (float): fillet radius
+
+    Returns:
+        _Fillet
+
+    Raises:
+        NonSmoothableError: Raised if there is no fillet or it does not fit on the segments.
+    """
+    # pylint: disable=too-many-locals
+    tangent_in = incoming.tangent(incoming.length)
+    tangent_out = outgoing.tangent(0.)
+
+    turn = math.atan2(_cross(tangent_in, tangent_out), float(np.dot(tangent_in, tangent_out)))
+    if abs(turn) > math.pi - 1e-6:
+        raise NonSmoothableError('Cannot smooth a cusp.')
+
+    # the center of the fillet is on the inner side of the corner
+    side = 1. if turn > 0. else -1.
+
+    guess = radius * math.tan(abs(turn) / 2.)
+    s_in = incoming.length - guess
+    s_out = guess
+
+    scale = max(incoming.length, outgoing.length, radius)
+
+    for _ in range(_NEWTON_ITERATIONS):
+        residual = (
+            incoming.point(s_in) + side * radius * _left_normal(incoming.tangent(s_in))
+            - outgoing.point(s_out) - side * radius * _left_normal(outgoing.tangent(s_out))
+        )
+        if np.linalg.norm(residual) < _TOLERANCE * scale:
+            break
+
+        speed_in = 1. - side * radius * incoming.curvature
+        speed_out = 1. - side * radius * outgoing.curvature
+        jacobian = np.column_stack((speed_in * incoming.tangent(s_in), -speed_out * outgoing.tangent(s_out)))
+        if abs(np.linalg.det(jacobian)) < 1e-14:
+            raise NonSmoothableError('The fillet is not well defined (radius equals a radius of curvature).')
+
+        step = np.linalg.solve(jacobian, -residual)
+        s_in += step[0]
+        s_out += step[1]
     else:
-        u_1 = (-b + np.sqrt(discr)) / (2*a)
-        u_2 = (-b - np.sqrt(discr)) / (2*a)
+        raise NonSmoothableError('Could not find a fillet.')
 
-        p_1 = line.start + u_1 * (line.end - line.start)
-        p_2 = line.start + u_2 * (line.end - line.start)
+    trim_in = incoming.length - s_in
+    trim_out = s_out
 
-        if intersection_on_arc(arc, p_1) and intersection_on_line(line, p_1):  #
-            intersection = p_1
-        elif intersection_on_arc(arc, p_2) and intersection_on_line(line, p_2):  #
-            intersection = p_2
-        else:
-            raise NonSmoothableError
+    eps = 1e-9 * scale
+    if trim_in < eps or trim_out < eps or trim_in > incoming.length + eps or trim_out > outgoing.length + eps:
+        raise NonSmoothableError('The fillet does not fit on the segments, the radius is too large.')
+    trim_in = min(trim_in, incoming.length)
+    trim_out = min(trim_out, outgoing.length)
 
-        return intersection
+    start = incoming.point(incoming.length - trim_in)
+    end = outgoing.point(trim_out)
 
-
-def line_line_intersection(line_1: Line, line_2: Line):
-    geom_line_1 = GeomLine.make_bisector(line_1.start, line_1.end)
-    geom_line_2 = GeomLine.make_bisector(line_2.start, line_2.end)
-
-    intersection = geom_line_1.intersect_at(geom_line_2)
-
-    if not intersection_on_line(line_1, intersection) or not intersection_on_line(line_2, intersection):
-        raise NonSmoothableError
-
-    return geom_line_1.intersect_at(geom_line_2)
-
-
-def make_arc_func(segment: Arc, other_tangent: np.array, kink: np.ndarray, radius: float):
-    phi_0 = segment.start_angle
-    arc_dir = -1 if not segment.sweep_dir else 1
-    theta = segment.theta
-    arc_center = segment.center
-    arc_radius = segment.radius
-
-    normal_vec = make_normal_vector(segment.unit_tangent_at(0.25 * segment.theta))
-
-    if np.dot(normal_vec, other_tangent) < 0:
-        normal_vec *= -1
-
-    if np.dot(normal_vec, kink - segment.center) > 0:
-        arc_normal_dir = 1
-    else:
-        arc_normal_dir = -1
-
-    # def arc_func(t_):
-    #     phi = arc_dir * t_ * theta + phi_0
-    #     return (
-    #         arc_center
-    #         + arc_radius * np.array([np.cos(phi), np.sin(phi)])
-    #         - arc_normal_dir * radius * np.array([-np.cos(phi), -np.sin(phi)])
-    #     )
-    #
-    # def arc_param(t_):
-    #     phi = arc_dir * t_ * theta + phi_0
-    #     return (
-    #         arc_center
-    #         + arc_radius * np.array([np.cos(phi), np.sin(phi)])
-    #     )
-
-    arc_offset_seg = Arc(
-        radius=arc_normal_dir * radius + segment.radius,
-        start_angle=segment.start_angle,
-        end_angle=segment.end_angle,
-        sweep_dir=segment.sweep_dir,
-        center=segment.center
+    # signed angle swept by the fillet (positive: counterclockwise)
+    fillet_turn = math.atan2(
+        _cross(incoming.tangent(incoming.length - trim_in), outgoing.tangent(trim_out)),
+        float(np.dot(incoming.tangent(incoming.length - trim_in), outgoing.tangent(trim_out)))
     )
+    if fillet_turn * side <= 0.:
+        raise NonSmoothableError('The fillet turns in the wrong direction, the radius is too large.')
 
-    # return arc_func, arc_param, arc_offset_seg
-    return arc_offset_seg
-
-
-def make_segments(
-    left_vertex: np.ndarray, kink_vertex: np.ndarray, right_vertex: np.ndarray, radius: float
-):
-    left_bulge = left_vertex[2]
-    right_bulge = kink_vertex[2]
-
-    kink = np.asarray(kink_vertex[:2], dtype=float)
-    left = np.asarray(left_vertex[:2], dtype=float)
-    right = np.asarray(right_vertex[:2], dtype=float)
-
-    # build curve segments. the left segment has an inverted direction
-    if np.isclose(left_bulge, 0.):
-        left_segment = Line(start=kink, end=left)
-        left_tangent_start = make_tangent_vector(start=kink, end=left)
-    else:
-        left_segment = Arc.from_bulge(start=kink, end=left, bulge=-left_bulge)
-        left_tangent_start = left_segment.unit_tangent_start
-
-    if np.isclose(right_bulge, 0.):
-        right_segment = Line(start=kink, end=right)
-        right_tangent_start = make_tangent_vector(start=kink, end=right)
-    else:
-        right_segment = Arc.from_bulge(start=kink, end=right, bulge=right_bulge)
-        right_tangent_start = right_segment.unit_tangent_start
-
-    left_normal_vec = make_normal_vector(left_tangent_start)
-    right_normal_vec = make_normal_vector(right_tangent_start)
-
-    if isinstance(left_segment, Line):
-        if np.dot(left_normal_vec, right_tangent_start) < 0:
-            left_normal_dir = -1
-        else:
-            left_normal_dir = 1
-
-        left_offset = Line(
-            start=left_segment.start + radius * left_normal_dir * left_normal_vec,
-            end=left_segment.end + radius * left_normal_dir * left_normal_vec
-        )
-
-    else:
-        # left_func, left_param,
-        left_offset = make_arc_func(left_segment, right_tangent_start, kink, radius)
-
-    if isinstance(right_segment, Line):
-        if np.dot(right_normal_vec, left_tangent_start) < 0:
-            right_normal_dir = -1
-        else:
-            right_normal_dir = 1
-
-        right_offset = Line(
-            start=right_segment.start + radius * right_normal_dir * right_normal_vec,
-            end=right_segment.end + radius * right_normal_dir * right_normal_vec
-        )
-
-    else:
-        # right_func, right_param,
-        right_offset = make_arc_func(right_segment, left_tangent_start, kink, radius)
-
-    return (left_segment, right_segment), (left_offset, right_offset)
+    return _Fillet(trim_in, trim_out, start, end, math.tan(fillet_turn / 4.))
 
 
-def make_smoothing_arc(
-    left_segment: Union[Line, Arc],
-    left_offset: Union[Line, Arc],
-    right_segment: Union[Line, Arc],
-    right_offset: Union[Line, Arc],
-):
-    if isinstance(left_segment, Arc) and isinstance(right_segment, Arc):
-        smoothing_arc_center = arc_arc_intersection(left_offset, right_offset)
-        smoothing_arc_start = Vector(smoothing_arc_center - left_segment.center).normalized_to(left_segment.radius) + left_segment.center
-        smoothing_arc_end = Vector(smoothing_arc_center - right_segment.center).normalized_to(right_segment.radius) + right_segment.center
-    elif isinstance(left_segment, Line) and isinstance(right_segment, Line):
-        smoothing_arc_center = line_line_intersection(left_offset, right_offset)
+def smooth(arc_spline: ArcSpline, radius: float) -> ArcSpline:
+    """Replace all kinks of an arc spline by tangent arcs of radius `radius` (fillets).
 
-        # https://en.wikibooks.org/wiki/Linear_Algebra/Orthogonal_Projection_Onto_a_Line
-        s1 = left_segment.end - left_segment.start
-        v1 = smoothing_arc_center - left_segment.start
-        smoothing_arc_start = s1.dot(v1) / s1.dot(s1) * s1 + left_segment.start
-        s2 = right_segment.end - right_segment.start
-        v2 = smoothing_arc_center - right_segment.start
-        smoothing_arc_end = s2.dot(v2) / s2.dot(s2) * s2 + right_segment.start
-    elif isinstance(left_segment, Line) and isinstance(right_segment, Arc):
-        smoothing_arc_center = arc_line_intersection(arc=right_offset, line=left_offset)
-        s1 = left_segment.end - left_segment.start
-        v1 = smoothing_arc_center - left_segment.start
-        smoothing_arc_start = s1.dot(v1) / s1.dot(s1) * s1 + left_segment.start
-        smoothing_arc_end = Vector(smoothing_arc_center - right_segment.center).normalized_to(right_segment.radius) + right_segment.center
-    elif isinstance(left_segment, Arc) and isinstance(right_segment, Line):
-        smoothing_arc_center = arc_line_intersection(arc=left_offset, line=right_offset)
-        smoothing_arc_start = Vector(smoothing_arc_center - left_segment.center).normalized_to(left_segment.radius) + left_segment.center
-        s2 = right_segment.end - right_segment.start
-        v2 = smoothing_arc_center - right_segment.start
-        smoothing_arc_end = s2.dot(v2) / s2.dot(s2) * s2 + right_segment.start
-    else:
-        raise RuntimeError
+    The arcs touch both adjacent segments tangentially, hence, the result is continuously differentiable.
 
-    return smoothing_arc_start, smoothing_arc_center, smoothing_arc_end
+    Args:
+        arc_spline (ArcSpline): curve to be smoothed
+        radius (float): radius of the new arcs (greater than 0)
 
+    Returns:
+        ArcSpline: smoothed curve (`arc_spline` itself if it does not contain kinks)
 
-def make_smoothed_vertices(
-    smoothing_arc_points: Tuple,
-    left_vertex, kink_vertex, right_vertex,
-    left_segment, right_segment
-):
-    smoothing_arc_start, smoothing_arc_center, smoothing_arc_end = smoothing_arc_points
+    Raises:
+        TypeError: Raised if arc_spline is not an ArcSpline.
+        ValueError: Raised if radius is not positive and finite.
+        NonSmoothableError: Raised if a kink cannot be smoothed, e.g. because the radius is too large for the
+            adjacent segments, two fillets would overlap or the curve has a cusp.
+    """
+    # pylint: disable=too-many-locals
+    if not isinstance(arc_spline, ArcSpline):
+        raise TypeError(f'arc_spline must be an ArcSpline, got {type(arc_spline).__name__}.')
 
-    if isinstance(left_segment, Line):
-        new_left_vertex = left_vertex
-    else:
-        new_left_vertex = (
-            *left_vertex[:2],
-            np.tan(
-                angle_between(
-                    left_segment.center - smoothing_arc_start,
-                    left_segment.center - left_vertex[:2]
-                ) / 4
-            ) * np.sign(left_vertex[2])
-        )
+    radius = float(radius)
+    if not math.isfinite(radius) or radius <= 0.:
+        raise ValueError(f'radius must be positive and finite, got {radius}.')
 
-    if isinstance(right_segment, Line):
-        new_right_vertex = (*smoothing_arc_end, 0)
-    else:
-        new_right_vertex = (
-            *smoothing_arc_end,
-            np.tan(
-                angle_between(
-                    right_segment.center - smoothing_arc_end,
-                    right_segment.center - right_vertex[:2]
-                ) / 4
-            ) * np.sign(kink_vertex[2])
-        )
-
-    sweep_matrix = np.ones(shape=(3, 3), dtype=float)
-    sweep_matrix[0, 1:] = np.asarray(smoothing_arc_start)
-    sweep_matrix[1, 1:] = np.asarray(kink_vertex[:2])
-    sweep_matrix[2, 1:] = np.asarray(smoothing_arc_end)
-
-    smooth_arc_sweep_dir = 1 if np.linalg.det(sweep_matrix) > 0 else -1
-
-    new_arc = (
-        *smoothing_arc_start,
-        np.tan(
-            angle_between(
-                smoothing_arc_center - smoothing_arc_start,
-                smoothing_arc_center - smoothing_arc_end
-            ) / 4
-        ) * smooth_arc_sweep_dir
-    )
-
-    return new_left_vertex, new_arc, new_right_vertex
-
-
-def smooth(arc_spline: ArcSpline, radius: float):
     kinks = arc_spline.kinks()
+    if not kinks:
+        return arc_spline
 
-    if kinks:
-        vertices = list(arc_spline.vertices)
+    vertices = arc_spline.vertices
+    n_vertices = len(vertices)
+    n_segments = n_vertices if arc_spline.is_closed else n_vertices - 1
 
-        wrap = lambda index: index % len(vertices)
+    segments = [
+        _Segment(vertices[i, :2], vertices[(i + 1) % n_vertices, :2], float(vertices[i, 2]))
+        for i in range(n_segments)
+    ]
 
-        index_offset = 0
+    # fillet of the kink at vertex i (between the segments i - 1 and i)
+    fillets = {
+        i_kink: _make_fillet(segments[(i_kink - 1) % n_segments], segments[i_kink], radius) for i_kink in kinks
+    }
 
-        for i_kink in kinks:
-            i_kink_with_offset = i_kink + index_offset
-            # print(i_kink, vertices[i_last_kink:i_kink-1])
-            kink_vertex = vertices[wrap(i_kink_with_offset)]
+    trims_start = [0.] * n_segments
+    trims_end = [0.] * n_segments
+    for i_kink, fillet in fillets.items():
+        trims_end[(i_kink - 1) % n_segments] = fillet.trim_incoming
+        trims_start[i_kink] = fillet.trim_outgoing
 
-            left_vertex = vertices[wrap(i_kink_with_offset-1)]
-            right_vertex = vertices[wrap(i_kink_with_offset+1)]
+    for segment, trim_start, trim_end in zip(segments, trims_start, trims_end):
+        if trim_start + trim_end > segment.length * (1. + 1e-9):
+            raise NonSmoothableError('Neighbouring fillets overlap, the radius is too large.')
 
-            (left_segment, right_segment), (left_offset, right_offset) = make_segments(
-                left_vertex, kink_vertex, right_vertex, radius
+    new_vertices: t.List[t.Tuple[float, float, float]] = []
+    for i_segment, segment in enumerate(segments):
+        remaining = segment.length - trims_start[i_segment] - trims_end[i_segment]
+
+        # a segment which is completely used by the fillets vanishes
+        if remaining > 1e-9 * segment.length:
+            start = segment.point(trims_start[i_segment])
+            new_vertices.append(
+                (start[0], start[1], segment.trimmed_bulge(trims_start[i_segment], trims_end[i_segment]))
             )
 
-            smoothing_arc_points = make_smoothing_arc(
-                left_segment, left_offset, right_segment, right_offset
-            )
+        i_end_vertex = (i_segment + 1) % n_vertices
+        if i_end_vertex in fillets:
+            fillet = fillets[i_end_vertex]
+            new_vertices.append((fillet.start[0], fillet.start[1], fillet.bulge))
 
-            new_left_vertex, new_arc, new_right_vertex = make_smoothed_vertices(
-                smoothing_arc_points, left_vertex, kink_vertex, right_vertex, left_segment, right_segment
-            )
+    if not arc_spline.is_closed:
+        end = vertices[-1, :2]
+        if (n_vertices - 1) in fillets:
+            raise NonSmoothableError('Unexpected kink at the end of an open curve.')
+        new_vertices.append((end[0], end[1], 0.))
 
-            vertices[i_kink_with_offset-1] = np.asarray(new_left_vertex)
-            vertices[i_kink_with_offset] = np.asarray(new_right_vertex)
-            vertices[i_kink_with_offset:i_kink_with_offset] = [np.asarray(new_arc)]
-
-            index_offset += 1
-
-        return ArcSpline(np.array(vertices), arc_spline.is_closed)
-
-    # no kinks found, no smoothing must be done
-    return arc_spline
+    return ArcSpline(np.array(new_vertices), arc_spline.is_closed)
