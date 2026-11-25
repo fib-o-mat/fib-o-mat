@@ -80,6 +80,24 @@ This will generate a file with the following content
 This output is most likely not tremendously useful, besides using it to visualize the rasterized data in the
 :ref:`ion beam simulation tool <user_guide/exporting_visualization:ion beam simulation>`.
 
+The second backend :class:`~fibomat.default_backends.fei.FEIStreamFile` produces streamfiles tailored to a specific microscope with the following format:
+
+.. code-block:: none
+
+    s16,25ns
+    Number of Points in File
+    Number of times the microscope shall repeat the file
+    t1 x1 y1
+    ...
+That is, the dwell times are automatically converted to units of 25 ns. The field of view gets included in the filename. The number of repeats as well as a margin (the ratio of the field of view that should be filled by the pattern) have to be handed over as a parameter.
+
+::
+    # Export to FEI stream file
+    exported = site.export(FEIStreamFile, n_rep=684, margin=0.76)
+    exported.save('sil_pattern.str')
+
+.. note:: The FEIStream backend is still under development and has some bugs left, for example it causes errors if the bounding box of the shape is not twodimensional.
+
 Customize output format
 +++++++++++++++++++++++
 
@@ -317,6 +335,7 @@ All further keyword arguments are passed to the :class:`~fibomat.default_backend
     * ``title``: title of the plot, by default the description of the layout
     * ``hide_sites``: if ``True``, :class:`~fibomat.layout.Site`\ s are not shown in the plot, by default ``False``
     * ``rasterize_pitch``: the pitch used to rasterize all plotting data to polylines, by default 0.01 µm
+    * ``plot_rasterized``: if True, the pattern will be rasterized using the pattern's rasterstyle and the resulting points are plotted.
     * ``legend``: if ``True``, a legend with all sites as entries is shown, by default ``True``
     * ``cycle_colors``: if ``True``, each site and all its shapes get a different color, by default ``True``
 
